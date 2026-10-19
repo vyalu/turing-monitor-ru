@@ -38,7 +38,8 @@ jobs:
           Copy-Item build/lhm-out/*.dll lhm/
           Remove-Item lhm/lhm.dll -ErrorAction SilentlyContinue
           $files = (Get-ChildItem lhm | ForEach-Object { "$($_.Name) $($_.Length)" }) -join "%0A"
-          $all = (Get-ChildItem -Recurse build/lhm-out | ForEach-Object { $_.FullName }) -join "%0A"
+          $pkg = "$env:USERPROFILE/.nuget/packages/librehardwaremonitorlib"
+          $all = (Get-ChildItem -Recurse $pkg -Filter *.dll | ForEach-Object { $_.FullName }) -join "%0A"
           Write-Output "::notice title=lhm files::$files"
           if (-not (Test-Path lhm/LibreHardwareMonitorLib.dll)) { Write-Output "::error title=lhm::нет LibreHardwareMonitorLib.dll%0A$all"; exit 1 }
 
