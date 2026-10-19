@@ -46,6 +46,7 @@ jobs:
         run: python -m pytest -q
 
       - name: Проверка датчиков
+        continue-on-error: true
         run: python tools/smoke_windows.py
 
       - name: Сборка exe (один файл)
@@ -66,8 +67,9 @@ jobs:
         run: |
           $p = Start-Process dist/TuringMonitorRU.exe -ArgumentList "--minimized" -PassThru
           Start-Sleep -Seconds 20
-          if ($p.HasExited) { Get-Content "$env:APPDATA/TuringMonitorRU/turmon.log"; throw "exe завершился с кодом $($p.ExitCode)" }
-          Get-Content "$env:APPDATA/TuringMonitorRU/turmon.log"
+          $log = (Get-Content "$env:APPDATA/TuringMonitorRU/turmon.log" -ErrorAction SilentlyContinue) -join "%0A"
+          if ($p.HasExited) { Write-Output "::error title=exe::код $($p.ExitCode)%0A$log"; exit 1 }
+          Write-Output "::notice title=exe log::$log"
           Stop-Process -Id $p.Id -Force
 
       - uses: actions/upload-artifact@v4

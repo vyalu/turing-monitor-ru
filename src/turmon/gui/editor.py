@@ -525,7 +525,7 @@ class EditorPage(QWidget):
         self.canvas.selected.connect(self.select)
         self.canvas.moved.connect(self._moved)
         self.canvas.drag_started.connect(lambda: self._push_undo("move", force=True))
-        self.canvas.drag_finished.connect(self._render)
+        self.canvas.drag_finished.connect(self._changed)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.canvas)
@@ -583,7 +583,7 @@ class EditorPage(QWidget):
         self._update_title()
         self._render()
         if self.cb_cast.isChecked():
-            self.engine.preview_theme(self.theme)
+            self.engine.preview_theme(self.theme.copy())
 
     def _update_title(self) -> None:
         if not self.theme:
@@ -631,15 +631,18 @@ class EditorPage(QWidget):
 
     def hideEvent(self, e) -> None:  # noqa: N802
         super().hideEvent(e)
-        if self.cb_cast.isChecked():
-            self.cb_cast.setChecked(False)
+        try:
+            if self.cb_cast.isChecked():
+                self.cb_cast.setChecked(False)
+        except RuntimeError:  # окно уже уничтожается
+            pass
 
     def _toggle_live(self, on: bool) -> None:
         self.live_values = on
         self._render()
 
     def _toggle_cast(self, on: bool) -> None:
-        self.engine.preview_theme(self.theme if on and self.theme else None)
+        self.engine.preview_theme(self.theme.copy() if on and self.theme else None)
 
     def _toggle_grid(self, on: bool) -> None:
         self.canvas.show_grid = on
@@ -756,7 +759,7 @@ class EditorPage(QWidget):
         self._update_title()
         self._render_soon()
         if self.cb_cast.isChecked():
-            self.engine.preview_theme(self.theme)
+            self.engine.preview_theme(self.theme.copy())
 
     # ---------- действия ----------
     def add_widget(self, wtype: str) -> None:

@@ -538,6 +538,9 @@ class SettingsPage(QScrollArea):
             text = f"LibreHardwareMonitor не загрузился: {lhm.status if lhm else ''}"
         elif is_admin():
             text = "Программа запущена от администратора — все датчики доступны."
+            if "cpu.temp" not in self.engine.hub.values:
+                text += (" Температура CPU не найдена: установите драйвер PawnIO (pawnio.eu) "
+                         "и перезапустите программу.")
         else:
             text = "Без прав администратора температура процессора может не показываться."
         self.admin_lbl.setText(text)
