@@ -62,6 +62,11 @@ class Engine:
         self.hub.add(self.system)
         self.lhm = LhmProvider(s.sensor_overrides, s.disk_index)
         self.hub.add(self.lhm)
+        if self.lhm.available:
+            try:
+                log.info("LibreHardwareMonitor: датчиков %d. %s", len(self.lhm.sensors()), self.lhm.status)
+            except Exception as e:  # noqa: BLE001
+                log.warning("LibreHardwareMonitor: %s", e)
         self.hub.add(VolumeProvider())
         self.weather = WeatherProvider(s.lat, s.lon, s.city)
         self.hub.add(self.weather)
