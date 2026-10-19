@@ -37,7 +37,10 @@ jobs:
           New-Item -ItemType Directory -Force lhm | Out-Null
           Copy-Item build/lhm-out/*.dll lhm/
           Remove-Item lhm/lhm.dll -ErrorAction SilentlyContinue
-          Get-ChildItem lhm | Select-Object Name, Length
+          $files = (Get-ChildItem lhm | ForEach-Object { "$($_.Name) $($_.Length)" }) -join "%0A"
+          $all = (Get-ChildItem -Recurse build/lhm-out | ForEach-Object { $_.FullName }) -join "%0A"
+          Write-Output "::notice title=lhm files::$files"
+          if (-not (Test-Path lhm/LibreHardwareMonitorLib.dll)) { Write-Output "::error title=lhm::нет LibreHardwareMonitorLib.dll%0A$all"; exit 1 }
 
       - name: Зависимости
         run: pip install -r requirements.txt pyinstaller pytest

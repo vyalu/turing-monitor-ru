@@ -30,8 +30,9 @@ def is_admin() -> bool:
 
 def lhm_dir() -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    here = Path(__file__).resolve()
     for cand in (base / "lhm", base / "turmon" / "lhm", Path(sys.executable).parent / "lhm",
-                 Path(__file__).resolve().parents[1] / "lhm"):
+                 here.parents[1] / "lhm", here.parents[3] / "lhm"):
         if (cand / "LibreHardwareMonitorLib.dll").exists():
             return cand
     return base / "lhm"
