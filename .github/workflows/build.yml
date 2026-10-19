@@ -37,6 +37,11 @@ jobs:
           New-Item -ItemType Directory -Force lhm | Out-Null
           Copy-Item build/lhm-out/*.dll lhm/
           Remove-Item lhm/lhm.dll -ErrorAction SilentlyContinue
+          if (-not (Test-Path lhm/LibreHardwareMonitorLib.dll)) {
+            $src = Get-ChildItem -Recurse "$env:USERPROFILE/.nuget/packages/librehardwaremonitorlib" -Filter LibreHardwareMonitorLib.dll |
+              Where-Object { $_.FullName -match 'win-x64\\lib\\net472' } | Select-Object -First 1
+            if ($src) { Copy-Item $src.FullName lhm/ }
+          }
           $files = (Get-ChildItem lhm | ForEach-Object { "$($_.Name) $($_.Length)" }) -join "%0A"
           $pkg = "$env:USERPROFILE/.nuget/packages/librehardwaremonitorlib"
           $all = (Get-ChildItem -Recurse $pkg -Filter *.dll | ForEach-Object { $_.FullName }) -join "%0A"
