@@ -1,0 +1,66 @@
+"""Настройки программы (settings.json в папке пользователя)."""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
+
+from .paths import config_file
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class Settings:
+    theme: str = "builtin:neon"          # builtin:<папка> или user:<папка>
+    port: str = "auto"
+    brightness: int = 60
+    flip: bool = False                   # экран установлен вверх ногами
+    chunk: int = 0                       # размер пакета записи (0 = авто)
+    fps_limit: float = 2.0               # не чаще N кадров в секунду
+
+    city: str = ""
+    lat: float | None = None
+    lon: float | None = None
+
+    net_iface: str = ""
+    disk: str = ""
+    disk_index: int = 0
+    sensor_overrides: dict[str, str] = field(default_factory=dict)
+
+    user_text1: str = ""
+    user_text2: str = ""
+    user_text3: str = ""
+
+    autostart: bool = False
+    start_minimized: bool = True
+    screen_off_on_exit: bool = True
+    minimize_to_tray: bool = True
+    first_run: bool = True
+
+    @classmethod
+    def load(cls, path: Path | None = None) -> "Settings":
+        path = path or config_file()
+        s = cls()
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return s
+        except (OSError, ValueError) as e:
+            log.warning("Не удалось прочитать настройки: %s", e)
+            return s
+        names = {f.name for f in fields(cls)}
+        for k, v in data.items():
+            if k in names:
+                setattr(s, k, v)
+        return s
+
+    def save(self, path: Path | None = None) -> None:
+        path = Path(path or config_file())
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+
+    def custom_values(self) -> dict[str, str]:
+        return {"user.text1": self.user_text1, "user.text2": self.user_text2, "user.text3": self.user_text3}

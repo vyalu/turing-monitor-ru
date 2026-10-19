@@ -1,0 +1,3 @@
+Roboto-*.ttf — Google Roboto, Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+DejaVuSans*.ttf — DejaVu Fonts, Bitstream Vera Fonts license / public domain changes
+(https://dejavu-fonts.github.io/License.html)

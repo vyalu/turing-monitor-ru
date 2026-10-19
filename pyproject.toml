@@ -1,0 +1,34 @@
+[project]
+name = "turing-monitor-ru"
+version = "1.0.0"
+description = "Свободная программа для мини-экранов Turing Smart Screen 3.5\" с русским интерфейсом"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "PySide6-Essentials>=6.7",
+  "Pillow>=10.0",
+  "numpy>=1.26",
+  "psutil>=5.9",
+  "pyserial>=3.5",
+  "fonttools>=4.40",
+  "pythonnet>=3.0.3; sys_platform == 'win32'",
+  "pycaw>=20240316; sys_platform == 'win32'",
+  "comtypes>=1.2; sys_platform == 'win32'",
+]
+
+[project.scripts]
+turmon = "turmon.gui.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+turmon = ["assets/*", "assets/fonts/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
