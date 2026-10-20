@@ -73,19 +73,41 @@ def search_city(query: str) -> list[City]:
     return out
 
 
+def _host(url: str) -> str:
+    return urllib.parse.urlparse(url).netloc
+
+
+def _loc_ipinfo(d: dict) -> City | None:
+    loc = str(d.get("loc") or "")
+    if "," not in loc:
+        return None
+    a, b = loc.split(",", 1)
+    return City(d.get("city") or "", float(a), float(b), ", ".join(x for x in (d.get("region"), d.get("country")) if x))
+
+
+GEO_SERVICES = (
+    ("https://ipwho.is/?lang=ru&fields=success,city,region,country,latitude,longitude",
+     lambda d: d.get("success") and City(d["city"], float(d["latitude"]), float(d["longitude"]),
+                                          ", ".join(x for x in (d.get("region"), d.get("country")) if x))),
+    ("https://ipinfo.io/json", _loc_ipinfo),
+    ("https://get.geojs.io/v1/ip/geo.json",
+     lambda d: d.get("latitude") and City(d.get("city") or "", float(d["latitude"]), float(d["longitude"]),
+                                          d.get("country") or "")),
+    ("https://ipapi.co/json/",
+     lambda d: d.get("latitude") is not None and City(d.get("city") or "", float(d["latitude"]),
+                                                      float(d["longitude"]), d.get("country_name") or "")),
+    ("https://freeipapi.com/api/json",
+     lambda d: d.get("latitude") is not None and City(d.get("cityName") or "", float(d["latitude"]),
+                                                      float(d["longitude"]), d.get("countryName") or "")),
+)
+
+
 def locate_by_ip() -> City:
-    """Примерное место по IP-адресу (если город не выбран вручную)."""
+    """Примерное место по IP-адресу (если город не выбран вручную). Пробуем несколько сервисов."""
     errors = []
-    for url, parse in (
-        ("https://ipwho.is/?lang=ru&fields=success,city,region,country,latitude,longitude",
-         lambda d: d.get("success") and City(d["city"], float(d["latitude"]), float(d["longitude"]),
-                                              ", ".join(x for x in (d.get("region"), d.get("country")) if x))),
-        ("https://ipapi.co/json/",
-         lambda d: d.get("latitude") is not None and City(d.get("city") or "", float(d["latitude"]),
-                                                          float(d["longitude"]), d.get("country_name") or "")),
-    ):
+    for url, parse in GEO_SERVICES:
         try:
-            c = parse(_get(url, timeout=8))
+            c = parse(_get(url, timeout=6))
             if c:
                 # русское название города, если геокодер его знает
                 try:
@@ -97,8 +119,8 @@ def locate_by_ip() -> City:
                     pass
                 return c
         except Exception as e:  # noqa: BLE001
-            errors.append(str(e))
-    raise RuntimeError("не удалось определить место: " + "; ".join(errors))
+            errors.append(f"{_host(url)}: {e}")
+    raise RuntimeError("не удалось определить место по IP (" + "; ".join(errors) + ")")
 
 
 def describe(code: int) -> tuple[str, str]:
@@ -109,11 +131,14 @@ class WeatherProvider(BackgroundProvider):
     name = "Погода"
     interval = 15 * 60
 
-    def __init__(self, lat: float | None, lon: float | None, city: str = "", auto: bool = True) -> None:
+    def __init__(self, lat: float | None, lon: float | None, city: str = "", auto: bool = True,
+                 cached: City | None = None, on_located=None) -> None:
         super().__init__()
         self.lat, self.lon, self.city = lat, lon, city
         self.auto = auto
         self.auto_city: City | None = None
+        self.cached = cached          # место, найденное в прошлый раз
+        self.on_located = on_located  # сохранить найденное место в настройки
         self.last_ok = 0.0
 
     @property
@@ -133,7 +158,14 @@ class WeatherProvider(BackgroundProvider):
                 self.status = "город не выбран"
                 return {}
             if self.auto_city is None:
-                self.auto_city = locate_by_ip()
+                try:
+                    self.auto_city = locate_by_ip()
+                    if self.on_located:
+                        self.on_located(self.auto_city)
+                except Exception:
+                    if self.cached is None:
+                        raise
+                    self.auto_city = self.cached  # сервисы недоступны — берём место из прошлого раза
             lat, lon, city = self.auto_city.lat, self.auto_city.lon, self.auto_city.name
         q = urllib.parse.urlencode({
             "latitude": lat, "longitude": lon,
@@ -142,7 +174,10 @@ class WeatherProvider(BackgroundProvider):
             "daily": "temperature_2m_max,temperature_2m_min,weather_code",
             "timezone": "auto", "wind_speed_unit": "ms", "forecast_days": 3,
         })
-        d = _get(f"https://api.open-meteo.com/v1/forecast?{q}")
+        try:
+            d = _get(f"https://api.open-meteo.com/v1/forecast?{q}", timeout=15)
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"сервис погоды open-meteo.com недоступен: {e}") from e
         cur = d.get("current", {})
         desc, icon = describe(cur.get("weather_code", 3))
         if icon == "clear" and not cur.get("is_day", 1):

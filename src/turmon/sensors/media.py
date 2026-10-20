@@ -19,6 +19,9 @@ log = logging.getLogger(__name__)
 
 APPS = {
     "spotify": "Spotify",
+    "yandexbrowser": "Яндекс Браузер",
+    "yandex.browser": "Яндекс Браузер",
+    "yandex\\application\\browser": "Яндекс Браузер",
     "yandex.music": "Яндекс Музыка",
     "yandexmusic": "Яндекс Музыка",
     "ru.yandex": "Яндекс Музыка",
@@ -42,6 +45,9 @@ APPS = {
 
 def app_name(aumid: str) -> str:
     low = (aumid or "").lower()
+    # Chromium-браузеры регистрируются как «Yandex.ХЭШ», «Chrome», «MSEdge»…
+    if low.startswith("yandex.") and "music" not in low:
+        return "Яндекс Браузер"
     for key, name in APPS.items():
         if key in low:
             return name

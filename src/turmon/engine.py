@@ -90,12 +90,19 @@ class Engine:
             self.fps = FpsProvider()
             self.hub.add(self.fps)
         if s.media_enabled:
-            from .paths import data_dir
-            from .sensors.media import MediaProvider
-
-            self.media = MediaProvider(data_dir() / "covers")
+            self.media = self._make_media()
             self.hub.add(self.media)
-        self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto)
+        from .sensors.weather import City
+
+        cached = City(s.auto_city, s.auto_lat, s.auto_lon) if s.auto_lat is not None else None
+
+        def located(c: City) -> None:
+            s.auto_city, s.auto_lat, s.auto_lon = c.name, c.lat, c.lon
+            try:
+                s.save()
+            except OSError:
+                pass
+        self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto, cached, located)
         self.hub.add(self.weather)
         self._thread = threading.Thread(target=self._run, name="engine", daemon=True)
         self._thread.start()
@@ -342,11 +349,28 @@ class Engine:
         from .sensors.media import MediaProvider
 
         def make():
-            m = MediaProvider(data_dir() / "covers")
+            m = self._make_media()
             if self.ui_ready:
                 m.ready.set()
             return m
+        _ = (data_dir, MediaProvider)
         self._swap_provider("media", make if on else None)
+
+    @staticmethod
+    def _make_media():
+        """С правами администратора Windows не отдаёт медиа-сеансы — читаем через помощника."""
+        import os as _os
+
+        from .paths import data_dir
+        from .sensors.lhm import is_admin
+
+        if _os.name == "nt" and is_admin():
+            from .sensors.media_helper import HelperMediaProvider
+
+            return HelperMediaProvider(data_dir())
+        from .sensors.media import MediaProvider
+
+        return MediaProvider(data_dir() / "covers")
 
     def mark_ui_ready(self) -> None:
         self.ui_ready = True

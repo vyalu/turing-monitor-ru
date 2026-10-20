@@ -44,6 +44,9 @@ class Settings:
     lat: float | None = None
     lon: float | None = None
     weather_auto: bool = True            # без выбранного города — определить по IP
+    auto_city: str = ""                  # место, найденное по IP в прошлый раз
+    auto_lat: float | None = None
+    auto_lon: float | None = None
 
     net_iface: str = ""
     disk: str = ""

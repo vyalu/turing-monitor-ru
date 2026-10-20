@@ -77,6 +77,7 @@ Filename: "{app}\{#AppExe}"; Description: "Запустить {#AppName}"; Flags
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""{#TaskName}"" /F"; Flags: runhidden; RunOnceId: "DelTask"
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""{#TaskName}-media"" /F"; Flags: runhidden; RunOnceId: "DelTaskMedia"
 Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v TuringMonitorRU /f"; Flags: runhidden; RunOnceId: "DelRunKey"
 
 [UninstallDelete]
@@ -94,7 +95,7 @@ var
   Code: Integer;
 begin
   { программа держит COM-порт и файлы в папке — закрываем её перед копированием }
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExe} /F', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExe} /F /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Sleep(800);
 end;
 

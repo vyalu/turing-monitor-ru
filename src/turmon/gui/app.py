@@ -19,10 +19,11 @@ from .common import app_icon, apply_style
 SERVER_NAME = f"{APP_NAME}-single"
 
 
-def setup_logging(debug: bool) -> None:
+def setup_logging(debug: bool, name: str = "") -> None:
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if debug else logging.INFO)
-    fh = logging.handlers.RotatingFileHandler(log_file(), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+    path = log_file().with_name(name) if name else log_file()
+    fh = logging.handlers.RotatingFileHandler(path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root.addHandler(fh)
     if sys.stderr is not None:
@@ -113,7 +114,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--wait-previous", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("file", nargs="?", help="файл темы .tmtheme для открытия")
+    ap.add_argument("--media-helper", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--parent", type=int, default=0, help=argparse.SUPPRESS)
     args, qt_args = ap.parse_known_args(argv if argv is not None else sys.argv[1:])
+
+    if args.media_helper:  # процесс-помощник без прав администратора: только читает музыку
+        setup_logging(args.debug, "media_helper.log")
+        from ..paths import data_dir
+        from ..sensors.media_helper import run_helper
+
+        return run_helper(args.parent, data_dir())
 
     setup_logging(args.debug)
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
