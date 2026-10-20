@@ -1,81 +1,160 @@
-"""Общие элементы интерфейса: тёмная тема, кнопка цвета, конвертация картинок."""
+"""Общие элементы интерфейса: оформление «Графит», кнопка цвета, конвертация картинок."""
 from __future__ import annotations
 
 from PIL import Image
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPalette, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QImage, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (QApplication, QColorDialog, QHBoxLayout, QPushButton, QToolButton,
                                QWidget)
 
 from ..paths import ASSETS
 from ..theme.render import parse_color
 
+# Цвета дизайн-системы «Графит» (имена совпадают с токенами в дизайн-системе)
+SURFACE_0 = "#0E1014"   # фон окна
+SURFACE_1 = "#14171C"   # навигация, панель инструментов
+SURFACE_2 = "#1A1E24"   # карточки, меню, списки
+SURFACE_3 = "#22272F"   # вторичные кнопки, наведение
+SURFACE_4 = "#2A303A"   # выбранное, нажатое
+FIELD = "#0B0D10"       # поля ввода и подложка превью
+LINE = "#262B33"        # волосяные линии
+LINE_STRONG = "#646C79" # рамки контролов (3:1)
+INK = "#ECEEF2"
+INK_2 = "#A3AAB7"
+INK_3 = "#6B7380"
 ACCENT = "#4FC3F7"
+ACCENT_HOVER = "#81D4FA"
+ACCENT_SOFT = "rgba(79, 195, 247, 36)"
+ON_ACCENT = "#0A0F14"
+OK = "#5FE3A1"
+WARN = "#FFB547"
+DANGER = "#FF7A6E"
+WARN_SURFACE = "#2B2112"
+WARN_LINE = "#5A4320"
+WARN_INK = "#FFD49A"
+
+UI_FONT = "Roboto"
 
 QSS = f"""
-* {{ font-size: 10pt; }}
-QMainWindow, QDialog {{ background: #15181E; }}
-QWidget {{ color: #E6E9EF; }}
-QFrame#card {{ background: #1C2027; border: 1px solid #262B34; border-radius: 12px; }}
-QLabel#h1 {{ font-size: 16pt; font-weight: 600; }}
-QLabel#h2 {{ font-size: 11pt; font-weight: 600; color: #FFFFFF; }}
-QLabel#muted {{ color: #8D96A7; }}
-QLabel#status_ok {{ color: #69F0AE; font-weight: 600; }}
-QLabel#status_bad {{ color: #FFB74D; font-weight: 600; }}
-QListWidget#nav {{ background: #101317; border: none; padding-top: 8px; outline: 0; }}
-QListWidget#nav::item {{ padding: 10px 14px; margin: 2px 8px; border-radius: 8px; color: #AAB2C0; }}
-QListWidget#nav::item:selected {{ background: #232934; color: #FFFFFF; }}
-QListWidget#nav::item:hover {{ background: #1B2028; }}
-QListWidget {{ background: #1C2027; border: 1px solid #262B34; border-radius: 10px; outline: 0; }}
-QListWidget::item:selected {{ background: #2A3342; color: white; border-radius: 6px; }}
-QPushButton, QToolButton {{ background: #262C36; border: 1px solid #313846; border-radius: 8px;
-    padding: 6px 12px; }}
-QPushButton:hover, QToolButton:hover {{ background: #2E3542; }}
-QPushButton:pressed, QToolButton:pressed {{ background: #222833; }}
-QPushButton#primary {{ background: {ACCENT}; color: #0B0E12; border: none; font-weight: 600; }}
-QPushButton#primary:hover {{ background: #81D4FA; }}
-QPushButton#danger {{ color: #FF8A80; }}
-QPushButton:disabled {{ color: #5A6170; }}
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit {{ background: #12151A;
-    border: 1px solid #2C323D; border-radius: 6px; padding: 4px 6px; selection-background-color: {ACCENT};
-    selection-color: #0B0E12; }}
+* {{ font-family: "{UI_FONT}", "Segoe UI", sans-serif; font-size: 13px; }}
+QMainWindow, QDialog {{ background: {SURFACE_0}; }}
+QWidget {{ color: {INK}; }}
+QFrame#card {{ background: {SURFACE_2}; border: 1px solid {LINE}; border-radius: 12px; }}
+QFrame#sidebar {{ background: {SURFACE_1}; border: none; border-right: 1px solid {LINE}; }}
+QFrame#toolbar {{ background: {SURFACE_1}; border: none; border-bottom: 1px solid {LINE}; }}
+QLabel#preview {{ background: {FIELD}; border: none; border-radius: 10px; }}
+QFrame#banner {{ background: {WARN_SURFACE}; border: 1px solid {WARN_LINE}; border-radius: 8px; }}
+QFrame#banner QLabel {{ color: {WARN_INK}; background: transparent; border: none; }}
+QLabel {{ background: transparent; }}
+QLabel#h1 {{ font-size: 22px; font-weight: 500; }}
+QLabel#h2 {{ font-size: 15px; font-weight: 500; color: {INK}; }}
+QLabel#brand {{ font-size: 14px; font-weight: 500; }}
+QLabel#muted {{ color: {INK_2}; font-size: 12px; }}
+QLabel#overline {{ color: {INK_2}; font-size: 11px; font-weight: 500; letter-spacing: 0.6px; }}
+QLabel#status_ok, QLabel#status_bad {{ background: {SURFACE_3}; border-radius: 11px; padding: 3px 10px;
+    font-size: 12px; font-weight: 500; }}
+QLabel#status_ok {{ color: {OK}; }}
+QLabel#status_bad {{ color: {WARN}; }}
+QListWidget#nav {{ background: transparent; border: none; outline: 0; }}
+QListWidget#nav::item {{ padding: 9px 12px; margin: 2px 0; border-radius: 8px; color: {INK_2}; }}
+QListWidget#nav::item:selected {{ background: {SURFACE_4}; color: {INK}; font-weight: 500; }}
+QListWidget#nav::item:hover:!selected {{ background: {SURFACE_3}; }}
+QListWidget {{ background: {SURFACE_2}; border: 1px solid {LINE}; border-radius: 10px; outline: 0; }}
+QListWidget::item {{ border-radius: 6px; padding: 3px 4px; }}
+QListWidget::item:selected {{ background: {SURFACE_4}; color: {INK}; }}
+QListWidget::item:hover:!selected {{ background: {SURFACE_3}; }}
+QListWidget#gallery {{ background: transparent; border: none; }}
+QListWidget#gallery::item {{ background: {SURFACE_2}; border: 1px solid {LINE}; border-radius: 12px;
+    padding: 6px 6px 4px 6px; margin: 4px; color: {INK}; }}
+QListWidget#gallery::item:hover:!selected {{ background: {SURFACE_3}; }}
+QListWidget#gallery::item:selected {{ background: {ACCENT_SOFT}; border: 1px solid {ACCENT}; color: {INK}; }}
+QPushButton, QToolButton {{ background: {SURFACE_3}; border: 1px solid {LINE_STRONG}; border-radius: 8px;
+    padding: 7px 14px; font-weight: 500; }}
+QToolButton {{ padding: 7px 10px; }}
+QPushButton:hover, QToolButton:hover {{ background: {SURFACE_4}; }}
+QPushButton:pressed, QToolButton:pressed, QPushButton:checked {{ background: {SURFACE_4}; border-color: {INK_3}; }}
+QPushButton:focus, QToolButton:focus {{ border: 1px solid {ACCENT}; }}
+QPushButton#primary {{ background: {ACCENT}; color: {ON_ACCENT}; border: 1px solid {ACCENT}; }}
+QPushButton#primary:hover {{ background: {ACCENT_HOVER}; border-color: {ACCENT_HOVER}; }}
+QPushButton#ghost {{ background: transparent; border: 1px solid transparent; color: {INK_2}; }}
+QPushButton#ghost:hover {{ background: {SURFACE_3}; color: {INK}; }}
+QPushButton#danger {{ color: {DANGER}; }}
+QPushButton:disabled, QToolButton:disabled {{ color: {INK_3}; background: {SURFACE_2}; border-color: {LINE}; }}
+QPushButton::menu-indicator {{ subcontrol-position: right center; right: 8px; }}
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit {{ background: {FIELD};
+    border: 1px solid {LINE_STRONG}; border-radius: 6px; padding: 5px 8px; selection-background-color: {ACCENT};
+    selection-color: {ON_ACCENT}; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus {{
     border: 1px solid {ACCENT}; }}
-QComboBox QAbstractItemView {{ background: #1C2027; border: 1px solid #2C323D; selection-background-color: #2A3342; }}
-QSlider::groove:horizontal {{ height: 6px; background: #2A303B; border-radius: 3px; }}
-QSlider::sub-page:horizontal {{ background: {ACCENT}; border-radius: 3px; }}
-QSlider::handle:horizontal {{ background: white; width: 16px; margin: -6px 0; border-radius: 8px; }}
-QCheckBox::indicator {{ width: 16px; height: 16px; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox QAbstractItemView {{ background: {SURFACE_2}; border: 1px solid {LINE_STRONG};
+    selection-background-color: {SURFACE_4}; outline: 0; }}
+QSlider::groove:horizontal {{ height: 4px; background: {SURFACE_4}; border-radius: 2px; }}
+QSlider::sub-page:horizontal {{ background: {ACCENT}; border-radius: 2px; }}
+QSlider::handle:horizontal {{ background: {INK}; width: 16px; height: 16px; margin: -6px 0; border-radius: 8px; }}
+QCheckBox {{ spacing: 8px; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1px solid {LINE_STRONG};
+    background: {FIELD}; }}
+QCheckBox::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
-QToolTip {{ background: #262C36; color: white; border: 1px solid #3A4250; }}
-QMenu {{ background: #1C2027; border: 1px solid #2C323D; }}
-QMenu::item {{ padding: 6px 22px; }}
-QMenu::item:selected {{ background: #2A3342; }}
-QGroupBox {{ border: 1px solid #262B34; border-radius: 10px; margin-top: 14px; padding: 10px; }}
-QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; color: #AAB2C0; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: {SURFACE_4}; border-radius: 3px; min-height: 30px; }}
+QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
+QScrollBar::handle:horizontal {{ background: {SURFACE_4}; border-radius: 3px; min-width: 30px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+QToolTip {{ background: {SURFACE_3}; color: {INK}; border: 1px solid {LINE_STRONG}; padding: 4px 6px; }}
+QMenu {{ background: {SURFACE_2}; border: 1px solid {LINE_STRONG}; padding: 4px; }}
+QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {SURFACE_4}; }}
+QMenu::separator {{ height: 1px; background: {LINE}; margin: 4px 6px; }}
+QGroupBox {{ background: {SURFACE_2}; border: 1px solid {LINE}; border-radius: 12px; margin-top: 30px;
+    padding: 14px 16px 12px 16px; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 4px; top: 4px; padding: 0; color: {INK};
+    font-size: 15px; font-weight: 500; }}
 QTabWidget::pane {{ border: none; }}
-QTabBar::tab {{ background: transparent; color: #AAB2C0; padding: 7px 16px; margin-right: 4px;
-    border: 1px solid #2C323D; border-radius: 8px; }}
-QTabBar::tab:selected {{ background: #2A3342; color: #FFFFFF; border-color: {ACCENT}; }}
-QTabBar::tab:hover:!selected {{ background: #1F242D; }}
+QTabBar#seg {{ background: {FIELD}; border: 1px solid {LINE}; border-radius: 8px; }}
+QTabBar#seg::tab {{ background: transparent; color: {INK_2}; padding: 5px 12px; margin: 3px 1px;
+    border: none; border-radius: 6px; font-weight: 500; }}
+QTabBar#seg::tab:selected {{ background: {SURFACE_4}; color: {INK}; }}
+QTabBar#seg::tab:hover:!selected {{ color: {INK}; }}
+QTabBar::tab {{ background: transparent; color: {INK_2}; padding: 6px 14px; margin-right: 4px;
+    border: 1px solid {LINE}; border-radius: 8px; }}
+QTabBar::tab:selected {{ background: {SURFACE_4}; color: {INK}; border-color: {LINE_STRONG}; }}
+QSplitter::handle {{ background: transparent; width: 8px; }}
 """
+
+
+def load_fonts() -> None:
+    """Подключить встроенные шрифты, чтобы интерфейс был набран Roboto на любой системе."""
+    folder = ASSETS / "fonts"
+    for f in sorted(folder.glob("*.ttf")):
+        QFontDatabase.addApplicationFont(str(f))
 
 
 def apply_style(app: QApplication) -> None:
     app.setStyle("Fusion")
+    load_fonts()
+    font = QFont(UI_FONT)
+    font.setPixelSize(13)
+    app.setFont(font)
     pal = QPalette()
-    pal.setColor(QPalette.Window, QColor("#15181E"))
-    pal.setColor(QPalette.WindowText, QColor("#E6E9EF"))
-    pal.setColor(QPalette.Base, QColor("#12151A"))
-    pal.setColor(QPalette.AlternateBase, QColor("#1C2027"))
-    pal.setColor(QPalette.Text, QColor("#E6E9EF"))
-    pal.setColor(QPalette.Button, QColor("#262C36"))
-    pal.setColor(QPalette.ButtonText, QColor("#E6E9EF"))
+    pal.setColor(QPalette.Window, QColor(SURFACE_0))
+    pal.setColor(QPalette.WindowText, QColor(INK))
+    pal.setColor(QPalette.Base, QColor(FIELD))
+    pal.setColor(QPalette.AlternateBase, QColor(SURFACE_2))
+    pal.setColor(QPalette.Text, QColor(INK))
+    pal.setColor(QPalette.PlaceholderText, QColor(INK_3))
+    pal.setColor(QPalette.Button, QColor(SURFACE_3))
+    pal.setColor(QPalette.ButtonText, QColor(INK))
     pal.setColor(QPalette.Highlight, QColor(ACCENT))
-    pal.setColor(QPalette.HighlightedText, QColor("#0B0E12"))
-    pal.setColor(QPalette.ToolTipBase, QColor("#262C36"))
-    pal.setColor(QPalette.ToolTipText, QColor("#FFFFFF"))
+    pal.setColor(QPalette.HighlightedText, QColor(ON_ACCENT))
+    pal.setColor(QPalette.ToolTipBase, QColor(SURFACE_3))
+    pal.setColor(QPalette.ToolTipText, QColor(INK))
+    pal.setColor(QPalette.Disabled, QPalette.Text, QColor(INK_3))
+    pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(INK_3))
+    pal.setColor(QPalette.Disabled, QPalette.WindowText, QColor(INK_3))
     app.setPalette(pal)
     app.setStyleSheet(QSS)
 

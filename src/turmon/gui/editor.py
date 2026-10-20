@@ -454,7 +454,7 @@ class EditorPage(QWidget):
         # панель инструментов
         bar = QHBoxLayout()
         self.title = QLabel("Редактор тем")
-        self.title.setObjectName("h1")
+        self.title.setObjectName("h2")
         self.title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         bar.addWidget(self.title, 1)
         self.cb_live = QCheckBox("Живые данные")
@@ -514,7 +514,7 @@ class EditorPage(QWidget):
         for txt, tip, fn in (("▲", "Выше (поверх других)", lambda: self.move_layer(1)),
                              ("▼", "Ниже", lambda: self.move_layer(-1)),
                              ("⧉", "Дублировать", self.duplicate),
-                             ("🗑", "Удалить", self.delete_widget)):
+                             ("✕", "Удалить", self.delete_widget)):
             b = QToolButton()
             b.setText(txt)
             b.setToolTip(tip)
@@ -550,7 +550,7 @@ class EditorPage(QWidget):
         self.props.changed.connect(self._prop_changed)
         rl.addWidget(self.props)
         split.addWidget(right)
-        split.setSizes([240, 700, 340])
+        split.setSizes([240, 640, 400])
         split.setStretchFactor(1, 1)
 
         hint = QLabel("Перетаскивайте элементы мышью. Стрелки — сдвиг на 1 px, Shift+стрелки — на 10 px. "
@@ -597,7 +597,7 @@ class EditorPage(QWidget):
         if not self.theme:
             return
         mark = " •" if self.dirty else ""
-        ro = "  (встроенная — сохранится копией)" if self.theme.builtin else ""
+        ro = "  · встроенная, сохранится копией" if self.theme.builtin else ""
         self.title.setText(f"{self.theme.name}{mark}{ro}")
 
     def confirm_discard(self) -> bool:
