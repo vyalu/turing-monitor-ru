@@ -18,7 +18,9 @@ class Settings:
     brightness: int = 60
     flip: bool = False                   # экран установлен вверх ногами
     chunk: int = 0                       # размер пакета записи (0 = авто)
-    fps_limit: float = 2.0               # не чаще N кадров в секунду
+    fps_limit: float = 2.0               # (устарело) раньше — кадров в секунду
+    smooth: bool = True                  # плавные переходы значений
+    anim_fps: int = 8                    # кадров в секунду во время перехода
     night_enabled: bool = False          # ночная яркость по расписанию
     night_from: str = "23:00"
     night_to: str = "07:00"
@@ -28,6 +30,9 @@ class Settings:
     fps_enabled: bool = True             # FPS в играх через PresentMon
     media_enabled: bool = True           # «Сейчас играет» из медиа-элементов Windows
     media_toast: bool = True             # всплывающая плашка о новом треке на мини-экране
+    player_mode: bool = True             # когда играет музыка — показывать страницу плеера темы
+    player_delay: int = 5                # сколько секунд держать плеер после паузы
+    player_in_game: bool = False         # показывать плеер и во время игры
     alert_enabled: bool = True           # предупреждение о перегреве
     alert_cpu: int = 90
     alert_gpu: int = 85
@@ -44,7 +49,8 @@ class Settings:
     disk: str = ""
     disk_index: int = 0
     sensor_overrides: dict[str, str] = field(default_factory=dict)
-    text_scales: dict[str, float] = field(default_factory=dict)   # тема -> масштаб текста
+    text_scales: dict[str, float] = field(default_factory=dict)   # тема -> масштаб подписей
+    value_scales: dict[str, float] = field(default_factory=dict)  # тема -> масштаб показателей
 
     user_text1: str = ""
     user_text2: str = ""

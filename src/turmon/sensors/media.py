@@ -29,6 +29,8 @@ APPS = {
     "opera": "Opera",
     "browser": "Яндекс Браузер",
     "vk": "VK Музыка",
+    "vkmusic": "VK Музыка",
+    "boom": "VK Музыка",
     "zunemusic": "Медиаплеер",
     "microsoft.media": "Медиаплеер",
     "aimp": "AIMP",
@@ -77,6 +79,9 @@ class MediaProvider(Provider):
         self._track_key = ""
         self.track_changed_at = 0.0  # для всплывающего уведомления
         self._pos_base: tuple[float, float, bool] | None = None  # (позиция, время замера, играет)
+        self._last_apps: list[str] | None = None
+        self.ready = threading.Event()  # интерфейс готов (окно создано)
+        self._diag_request = None
 
     def start(self) -> None:
         if os.name != "nt":
@@ -105,19 +110,104 @@ class MediaProvider(Provider):
     async def _loop(self) -> None:
         from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as Mgr
 
+        # при автозапуске через планировщик Windows отдаёт сеансы только после появления окна
+        # программы — ждём сигнала от интерфейса (не дольше 15 с)
+        await asyncio.get_running_loop().run_in_executor(None, self.ready.wait, 15)
         mgr = await Mgr.request_async()
+        log.info("Медиа: менеджер сеансов Windows получен")
+        last_err = ""
+        empty_since = time.monotonic()
         while not self._stop.is_set():
+            # ни одного сеанса долго — переподключаемся (помогает после сна и перезапуска Explorer)
+            try:
+                n = len(list(mgr.get_sessions()))
+            except Exception:  # noqa: BLE001
+                n = 0
+            if n:
+                empty_since = time.monotonic()
+            elif time.monotonic() - empty_since > 30:
+                empty_since = time.monotonic()
+                try:
+                    mgr = await Mgr.request_async()
+                except Exception as e:  # noqa: BLE001
+                    log.debug("Медиа: переподключение: %s", e)
             try:
                 self._values = await self._read(mgr)
                 self.status = ""
+                last_err = ""
             except Exception as e:  # noqa: BLE001
                 self.status = str(e)
                 self._values = {}
-                log.debug("Медиа: %s", e)
+                if str(e) != last_err:  # одну и ту же ошибку пишем в журнал один раз
+                    last_err = str(e)
+                    log.warning("Медиа: ошибка чтения: %s", e)
+            if self._diag_request is not None:
+                req, self._diag_request = self._diag_request, None
+                try:
+                    req.result = await self._diagnose(mgr)
+                except Exception as e:  # noqa: BLE001
+                    req.result = [f"ошибка: {e}"]
+                req.done.set()
             await asyncio.sleep(self.POLL)
 
+    # ---- выбор сеанса: тот, что играет; иначе «текущий» по мнению Windows ----
+    @staticmethod
+    def _status(s) -> int:
+        try:
+            info = s.get_playback_info()
+            return int(info.playback_status) if info is not None else 0
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _pick(self, mgr):
+        try:
+            sessions = list(mgr.get_sessions())
+        except Exception:  # noqa: BLE001
+            sessions = []
+        apps = sorted(f"{app_name(x.source_app_user_model_id or '')}:{self._status(x)}" for x in sessions)
+        if apps != self._last_apps:
+            self._last_apps = apps
+            log.info("Медиа: сеансы плееров: %s", ", ".join(apps) or "нет ни одного")
+        for x in sessions:
+            if self._status(x) == 4:  # PLAYING
+                return x
+        cur = mgr.get_current_session()
+        if cur is not None:
+            return cur
+        return sessions[0] if sessions else None
+
+    async def _diagnose(self, mgr) -> list[str]:
+        names = {0: "закрыт", 1: "открыт", 2: "меняется", 3: "остановлен", 4: "играет", 5: "пауза"}
+        out = []
+        for x in list(mgr.get_sessions()):
+            aumid = x.source_app_user_model_id or ""
+            try:
+                pr = await x.try_get_media_properties_async()
+                t = f"{(pr.artist or '').strip()} — {(pr.title or '').strip()}" if pr else "(нет данных о треке)"
+                has_cover = bool(pr and pr.thumbnail is not None)
+            except Exception as e:  # noqa: BLE001
+                t, has_cover = f"(ошибка: {e})", False
+            out.append(f"{app_name(aumid)} [{aumid}] — {names.get(self._status(x), '?')}: {t}"
+                       + ("  · есть обложка" if has_cover else ""))
+        return out or ["Windows не видит ни одного медиа-сеанса."]
+
+    def diagnose(self, timeout: float = 6.0) -> list[str]:
+        """Список плееров, которые видит Windows (для кнопки «Проверить» в настройках)."""
+        if self._thread is None or not self._thread.is_alive():
+            return [f"модуль не запущен: {self.status or 'неизвестная ошибка'}"]
+
+        class Req:
+            def __init__(self) -> None:
+                self.done = threading.Event()
+                self.result: list[str] = []
+        req = Req()
+        self._diag_request = req
+        if not req.done.wait(timeout):
+            return ["нет ответа от Windows"]
+        return req.result
+
     async def _read(self, mgr) -> Values:
-        s = mgr.get_current_session()
+        s = self._pick(mgr)
         if s is None:
             self._track_key = ""
             return {}

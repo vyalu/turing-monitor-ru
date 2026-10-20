@@ -262,3 +262,77 @@ def test_overlays_render():
     assert t.size == f.size and t.getpixel((240, 300)) != (10, 10, 10)
     p = Image.new("RGB", (320, 480))
     assert draw_toast(p, {"media.title": "Трек"}, 1.0).size == (320, 480)
+
+
+def test_label_and_value_scales_are_separate():
+    t = Theme(widgets=[
+        {"type": "text", "id": "lbl", "x": 0, "y": 0, "text": "ОЗУ", "size": 20},
+        {"type": "text", "id": "val", "x": 0, "y": 100, "text": "{ram.load:.0f}%", "size": 20},
+    ])
+    t = Theme.from_dict(t.to_dict())
+    r = Renderer(t, (1.0, 1.0))
+    r.render({"ram.load": 48})
+    h_lbl, h_val = (r.bboxes["lbl"][3] - r.bboxes["lbl"][1]), (r.bboxes["val"][3] - r.bboxes["val"][1])
+    r = Renderer(t, (1.0, 1.5))
+    r.render({"ram.load": 48})
+    assert r.bboxes["lbl"][3] - r.bboxes["lbl"][1] == h_lbl          # подписи не изменились
+    assert r.bboxes["val"][3] - r.bboxes["val"][1] > h_val * 1.3      # показатели крупнее
+
+
+def test_smooth_transition():
+    from turmon.theme.smooth import Smoother
+
+    s = Smoother(duration=0.5)
+    s.set_target({"cpu.load": 3.0, "time.hm": "21:47"}, now=0.0)
+    assert s.values(0.0)["cpu.load"] == 3.0 and s.done(0.0)
+    s.set_target({"cpu.load": 12.0, "time.hm": "21:48"}, now=1.0)
+    mid = s.values(1.1)["cpu.load"]
+    assert 3.0 < mid < 12.0 and not s.done(1.1)           # едет, а не прыгает
+    assert s.values(1.1)["time.hm"] == "21:48"            # время не анимируется
+    assert s.values(1.6)["cpu.load"] == 12.0 and s.done(1.6)
+
+
+def test_player_page_auto_and_custom():
+    from turmon.theme.player import auto_page, palette
+
+    for name in ("calm_lavanda", "mono_bumaga", "neon_arkada"):
+        t = Theme.load(ROOT / "themes" / name)
+        p = palette(t)
+        assert p["ink"] != p["bg"]
+        page = auto_page(t)
+        assert any(w["type"] == "vinyl" for w in page["widgets"])
+        r = Renderer(t, page="player")
+        vals = sample_values()
+        vals["media.playing"] = 1
+        im = r.render(vals)
+        assert im.size == t.size
+    # своя страница сохраняется и читается
+    t = Theme.load(ROOT / "themes" / "calm_grafit")
+    t.player = auto_page(t)
+    t.player["widgets"][0]["x"] = 5
+    t2 = Theme.from_dict(t.to_dict())
+    assert t2.player["widgets"][0]["x"] == 5
+
+
+def test_engine_switches_to_player_and_back(monkeypatch):
+    import time as _t
+
+    from turmon.config import Settings
+    from turmon.engine import Engine
+
+    e = Engine.__new__(Engine)
+    e.settings = Settings(player_mode=True, media_enabled=True, player_delay=5)
+    e.media = object()
+    e.theme = Theme.load(ROOT / "themes" / "calm_grafit")
+    now = [100.0]
+    monkeypatch.setattr(_t, "monotonic", lambda: now[0])
+    play = {"media.title": "Трек", "media.playing": 1}
+    assert e._player_page(play) == "player"
+    paused = {"media.title": "Трек", "media.playing": 0}
+    now[0] = 103
+    assert e._player_page(paused) == "player"      # пауза — ещё держим плеер
+    now[0] = 106
+    assert e._player_page(paused) == "main"        # прошло 5 с — обратно к теме
+    assert e._player_page({**play, "fps.value": 144}) == "main"  # в игре — FPS важнее
+    e.settings.player_mode = False
+    assert e._player_page(play) == "main"

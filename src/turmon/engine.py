@@ -59,6 +59,11 @@ class Engine:
         self.system: SystemProvider | None = None
         self.fps = None
         self.media = None
+        self.ui_ready = False
+        from .theme.smooth import Smoother
+
+        self.smoother = Smoother()
+        self._force_sample = False
         from .overlay import OverheatWatch
 
         self.overheat = OverheatWatch()
@@ -156,23 +161,31 @@ class Engine:
         log.info("Пробуждение: переподключение к экрану")
 
     # ---- масштаб текста ----
-    def scale_for(self, theme: Theme) -> float:
+    def _scale_key(self, theme: Theme) -> str:
         if theme.folder is None:
-            return 1.0
+            return self.settings.theme
         try:
-            key = theme_lib.id_of(theme.folder)
+            return theme_lib.id_of(theme.folder)
         except Exception:  # noqa: BLE001
-            return 1.0
-        return float(self.settings.text_scales.get(key, 1.0))
+            return self.settings.theme
 
-    def set_text_scale(self, scale: float) -> None:
+    def scale_for(self, theme: Theme) -> tuple[float, float]:
+        """(подписи, показатели). Раньше был один общий ползунок — его значение берётся для обоих."""
+        key = self._scale_key(theme)
+        labels = float(self.settings.text_scales.get(key, 1.0))
+        values = float(self.settings.value_scales.get(key, labels))
+        return labels, values
+
+    def set_scales(self, labels: float, values: float) -> None:
         with self._lock:
-            key = theme_lib.id_of(self.theme.folder) if self.theme.folder else self.settings.theme
-            if abs(scale - 1.0) < 0.001:
+            key = self._scale_key(self.theme)
+            if abs(labels - 1.0) < 0.001 and abs(values - 1.0) < 0.001:
                 self.settings.text_scales.pop(key, None)
+                self.settings.value_scales.pop(key, None)
             else:
-                self.settings.text_scales[key] = round(scale, 2)
-            self.renderer.text_scale = scale
+                self.settings.text_scales[key] = round(labels, 2)
+                self.settings.value_scales[key] = round(values, 2)
+            self.renderer.label_scale, self.renderer.value_scale = labels, values
         self._wake.set()
 
     # ---- команды из интерфейса ----
@@ -328,7 +341,17 @@ class Engine:
         from .paths import data_dir
         from .sensors.media import MediaProvider
 
-        self._swap_provider("media", (lambda: MediaProvider(data_dir() / "covers")) if on else None)
+        def make():
+            m = MediaProvider(data_dir() / "covers")
+            if self.ui_ready:
+                m.ready.set()
+            return m
+        self._swap_provider("media", make if on else None)
+
+    def mark_ui_ready(self) -> None:
+        self.ui_ready = True
+        if self.media is not None:
+            self.media.ready.set()
 
     # ---- вставки поверх темы ----
     def _watch_alerts(self, values: dict) -> bool:
@@ -348,13 +371,48 @@ class Engine:
                 pass
         return bool(w.active) and s.alert_blink
 
+    # ---- режим плеера ----
+    def _player_page(self, values: dict) -> str:
+        """Какую страницу темы показывать: «main» или «player»."""
+        s = self.settings
+        if not (s.player_mode and s.media_enabled and self.media is not None):
+            self._player_since = None
+            return "main"
+        if values.get("fps.value") is not None and not s.player_in_game:
+            return "main"  # в игре важнее FPS
+        t = self.theme
+        if t.player is None and any(w.get("type") in ("cover", "vinyl") for w in t.widgets):
+            return "main"  # тема сама по себе плеер — переключать незачем
+        now = time.monotonic()
+        playing = bool(values.get("media.title")) and bool(values.get("media.playing"))
+        if playing:
+            self._player_last_play = now
+            return "player"
+        # пауза или трек закончился — ещё немного держим плеер, потом возвращаемся к теме
+        if values.get("media.title") and now - getattr(self, "_player_last_play", -1e9) < s.player_delay:
+            return "player"
+        return "main"
+
+    def _player_animated(self, values: dict) -> bool:
+        """Вращение пластинки — чаще обычного кадра."""
+        if not values.get("media.playing"):
+            return False
+        pg = self.renderer.page_data()
+        return any(w.get("type") == "vinyl" and w.get("rotate", True) and w.get("visible", True)
+                   for w in pg.get("widgets", []))
+
+    @property
+    def page(self) -> str:
+        return self.renderer.page
+
     def _overlays(self, frame, values: dict):
         from . import overlay
 
         now = time.monotonic()
         anim = False
         m = self.media
-        if m is not None and self.settings.media_toast and m.track_changed_at:
+        in_player = self.renderer.page == "player"
+        if m is not None and self.settings.media_toast and m.track_changed_at and not in_player:
             age = now - m.track_changed_at
             # трек, который уже играл при запуске программы, «новым» не считаем
             fresh = m.track_changed_at - self._t_start > 6
@@ -411,15 +469,34 @@ class Engine:
             self._set_status(str(e))
 
     def _run(self) -> None:
+        next_sample = 0.0
+        raw: dict = {}
+        history: dict = {}
+        alert_busy = False
         while not self._stop.is_set():
             t0 = time.monotonic()
             with self._lock:
                 theme, renderer = self.theme, self.renderer
-            self.hub.update()
-            values, history = self.hub.snapshot()
-            busy = self._watch_alerts(values)
+            sample_period = max(0.5, float(theme.refresh or 1.0))
+            if t0 >= next_sample or self._force_sample:
+                self._force_sample = False
+                self.hub.update()
+                raw, history = self.hub.snapshot()
+                alert_busy = self._watch_alerts(raw)
+                self.smoother.set_target(raw, t0)
+                next_sample = t0 + sample_period
+            smooth = self.settings.smooth
+            values = self.smoother.values(t0) if smooth else raw
+            busy = alert_busy
             try:
+                page = self._player_page(values)
+                if renderer.page != page:
+                    renderer.page = page
+                    renderer._bg_key = None
+                    self.sender.invalidate()
                 frame = renderer.render(values, history)
+                if page == "player":
+                    busy = busy or self._player_animated(values)
                 frame, anim = self._overlays(frame, values)
                 busy = busy or anim
             except Exception:  # noqa: BLE001
@@ -447,9 +524,12 @@ class Engine:
                     except DisplayError as e:
                         self._lost(e)
 
-            period = max(float(theme.refresh or 1.0), 1.0 / max(0.2, self.settings.fps_limit))
-            if busy:  # мигание рамки и появление плашки — чаще, чем обычный кадр
-                period = min(period, 0.25)
-            delay = max(0.05, period - (time.monotonic() - t0))
-            self._wake.wait(delay)
+            # следующий кадр: во время плавного перехода и анимаций — чаще, иначе ждём новых данных
+            now = time.monotonic()
+            wake_at = next_sample
+            if smooth and not self.smoother.done(now):
+                wake_at = min(wake_at, t0 + 1.0 / max(1.0, float(self.settings.anim_fps)))
+            if busy:  # мигание рамки, плашка трека, вращение пластинки
+                wake_at = min(wake_at, t0 + 0.25)
+            self._wake.wait(max(0.02, wake_at - now))
             self._wake.clear()

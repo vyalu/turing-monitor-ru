@@ -78,6 +78,9 @@ jobs:
       - name: Тесты
         run: python -m pytest -q
 
+      - name: Пакеты для тестового плеера
+        run: pip install winrt-Windows.Media.Playback winrt-Windows.Media.Core winrt-Windows.Media winrt-Windows.Storage
+
       - name: Проверка датчиков
         continue-on-error: true
         run: python tools/smoke_windows.py

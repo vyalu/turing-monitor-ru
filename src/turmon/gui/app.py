@@ -182,6 +182,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if not (args.minimized and settings.start_minimized):
         win.show()
+        QTimer.singleShot(500, engine.mark_ui_ready)
+    else:
+        # Windows отдаёт медиа-сеансы программе, у которой было окно: показываем его
+        # на миг невидимым и сразу прячем в трей
+        win.setWindowOpacity(0.0)
+        win.show()
+
+        def hide_again() -> None:
+            win.hide()
+            win.setWindowOpacity(1.0)
+            engine.mark_ui_ready()
+        QTimer.singleShot(700, hide_again)
 
     if settings.first_run and not args.minimized:
         settings.first_run = False

@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
                                QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
-                               QScrollArea, QSizePolicy, QSpinBox, QSplitter, QToolButton, QVBoxLayout,
+                               QScrollArea, QSizePolicy, QSpinBox, QSplitter, QTabBar, QToolButton, QVBoxLayout,
                                QWidget)
 
 from .. import themes as theme_lib
@@ -421,6 +421,11 @@ class PropertyPanel(QScrollArea):
         return w
 
 
+PLAYER_FIELDS = [
+    Field("background", "Цвет фона страницы плеера", "color", "#000000"),
+    Field("background_image", "Фоновая картинка страницы плеера", "image", ""),
+]
+
 THEME_FIELDS = [
     Field("name", "Название", "text", ""),
     Field("author", "Автор", "text", ""),
@@ -497,6 +502,27 @@ class EditorPage(QWidget):
         h = QLabel("Элементы")
         h.setObjectName("h2")
         ll.addWidget(h)
+        self.page = "main"
+        self.page_bar = QTabBar()
+        self.page_bar.setObjectName("seg")
+        self.page_bar.setExpanding(True)
+        self.page_bar.setDrawBase(False)
+        self.page_bar.addTab("Основная")
+        self.page_bar.addTab("Плеер")
+        self.page_bar.setToolTip("Страница «Плеер» показывается вместо основной, пока играет музыка")
+        self.page_bar.currentChanged.connect(self._page_changed)
+        ll.addWidget(self.page_bar)
+        self.page_hint = QLabel()
+        self.page_hint.setObjectName("muted")
+        self.page_hint.setWordWrap(True)
+        self.page_hint.setVisible(False)
+        ll.addWidget(self.page_hint)
+        self.b_page_reset = QPushButton("Вернуть автоматическую")
+        self.b_page_reset.setToolTip("Удалить свою страницу плеера: она снова будет собираться из цветов темы")
+        self.b_page_reset.clicked.connect(self._reset_player_page)
+        self.b_page_reset.setVisible(False)
+        ll.addWidget(self.b_page_reset)
+        self._auto_player = False
         self.layers = QListWidget()
         self.layers.currentRowChanged.connect(self._layer_selected)
         self.layers.itemChanged.connect(self._layer_checked)
@@ -582,7 +608,11 @@ class EditorPage(QWidget):
     def _set_theme(self, t: Theme, theme_id: str) -> None:
         self.theme = t
         self.theme_id = theme_id
-        self.renderer = Renderer(t, self.engine.scale_for(t))
+        self._auto_player = False
+        if self.page == "player" and t.player is None:
+            self._make_auto_player()
+        self.renderer = Renderer(t, self.engine.scale_for(t), page=self.page)
+        self._update_page_hint()
         self.undo.clear()
         self.redo.clear()
         self.dirty = False
@@ -624,10 +654,11 @@ class EditorPage(QWidget):
             return
         vals, hist = self._values()
         self.renderer.theme = self.theme
+        self.renderer.page = self.page
         img = self.renderer.render(vals, hist)
         self.canvas.bboxes = dict(self.renderer.bboxes)
-        self.canvas.order = [w["id"] for w in self.theme.widgets if w.get("visible", True)]
-        self.canvas.positions = {w["id"]: (int(w.get("x", 0)), int(w.get("y", 0))) for w in self.theme.widgets}
+        self.canvas.order = [w["id"] for w in self._ws() if w.get("visible", True)]
+        self.canvas.positions = {w["id"]: (int(w.get("x", 0)), int(w.get("y", 0))) for w in self._ws()}
         self.canvas.set_frame(pil_to_pixmap(img), self.theme.size)
 
     def _render_soon(self) -> None:
@@ -668,7 +699,7 @@ class EditorPage(QWidget):
         self.layers.blockSignals(True)
         self.layers.clear()
         if self.theme:
-            for w in reversed(self.theme.widgets):  # сверху — то, что рисуется поверх
+            for w in reversed(self._ws()):  # сверху — то, что рисуется поверх
                 it = QListWidgetItem(widget_title(w))
                 it.setData(Qt.UserRole, w["id"])
                 it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
@@ -703,10 +734,60 @@ class EditorPage(QWidget):
                 w["visible"] = vis
                 self._changed()
 
+    def _ws(self) -> list:
+        """Элементы редактируемой страницы."""
+        if self.theme is None:
+            return []
+        if self.page == "player":
+            if self.theme.player is None:
+                self._make_auto_player()
+            return self.theme.player["widgets"]
+        return self.theme.widgets
+
+    def _make_auto_player(self) -> None:
+        from ..theme.player import auto_page
+
+        self.theme.player = copy.deepcopy(auto_page(self.theme))
+        self._auto_player = True
+
+    def _page_changed(self, idx: int) -> None:
+        self.page = "player" if idx == 1 else "main"
+        if self.theme is not None and self.page == "player" and self.theme.player is None:
+            self._make_auto_player()
+        self._update_page_hint()
+        if self.renderer is not None:
+            self.renderer.page = self.page
+            self.renderer._bg_key = None
+        self._refresh_layers()
+        self.select("")
+        self._render()
+
+    def _update_page_hint(self) -> None:
+        on = self.page == "player"
+        if on and self._auto_player:
+            self.page_hint.setText("Страница собрана автоматически из цветов и шрифтов темы. Измените что-нибудь — "
+                                   "и она сохранится вместе с темой.")
+        elif on:
+            self.page_hint.setText("Своя страница плеера этой темы. Показывается, пока играет музыка.")
+        self.page_hint.setVisible(on)
+        self.b_page_reset.setVisible(on and not self._auto_player)
+
+    def _reset_player_page(self) -> None:
+        if not self.theme:
+            return
+        self._push_undo("player-reset", force=True)
+        self.theme.player = None
+        self._make_auto_player()
+        self.renderer._bg_key = None
+        self._refresh_layers()
+        self.select("")
+        self._changed(keep_auto=True)
+        self._update_page_hint()
+
     def _widget(self, wid: str) -> dict | None:
         if not self.theme:
             return None
-        return next((w for w in self.theme.widgets if w["id"] == wid), None)
+        return next((w for w in self._ws() if w["id"] == wid), None)
 
     # ---------- выбор и свойства ----------
     def select(self, wid: str) -> None:
@@ -717,7 +798,9 @@ class EditorPage(QWidget):
             self.props.show_message("Откройте тему на вкладке «Экран» или создайте новую.")
             return
         w = self._widget(wid) if wid else None
-        if w is None:
+        if w is None and self.page == "player":
+            self.props.show_fields("Страница плеера", PLAYER_FIELDS, self.theme.player or {}, self._pick_image)
+        elif w is None:
             self.props.show_fields("Свойства темы", THEME_FIELDS, self.theme.to_dict(), self._pick_image)
         else:
             spec = WIDGETS.get(w["type"], {"label": w["type"], "fields": ()})
@@ -729,7 +812,11 @@ class EditorPage(QWidget):
             return
         self._push_undo(f"{self.canvas.sel}:{name}")
         w = self._widget(self.canvas.sel) if self.canvas.sel else None
-        if w is None:
+        if w is None and self.page == "player":
+            self._ws()  # страница точно существует
+            self.theme.player[name] = value
+            self.renderer._bg_key = None
+        elif w is None:
             if name == "landscape" and value != self.theme.landscape:
                 self._swap_orientation(bool(value))
             else:
@@ -746,7 +833,7 @@ class EditorPage(QWidget):
         ow, oh = self.theme.size
         self.theme.landscape = landscape
         nw, nh = self.theme.size
-        for w in self.theme.widgets:
+        for w in self._ws():
             w["x"] = min(int(w.get("x", 0)), nw - 10)
             w["y"] = min(int(w.get("y", 0)), nh - 10)
 
@@ -758,11 +845,17 @@ class EditorPage(QWidget):
         self.props.set_value("x", x)
         self.props.set_value("y", y)
         self.canvas.positions[wid] = (x, y)
+        if self.page == "player" and self._auto_player:
+            self._auto_player = False
+            self._update_page_hint()
         self.dirty = True
         self._update_title()
         self._render_soon()
 
-    def _changed(self) -> None:
+    def _changed(self, keep_auto: bool = False) -> None:
+        if self.page == "player" and self._auto_player and not keep_auto:
+            self._auto_player = False  # страницу правили — теперь она своя и сохранится с темой
+            self._update_page_hint()
         self.dirty = True
         self._update_title()
         self._render_soon()
@@ -778,7 +871,7 @@ class EditorPage(QWidget):
         w = new_widget(wtype, x=fw // 2 - 40, y=fh // 2 - 20)
         if wtype == "text":
             w.update(text="{cpu.temp:.0f}°C", x=fw // 2 - 30)
-        self.theme.widgets.append(w)
+        self._ws().append(w)
         self._refresh_layers()
         self.select(w["id"])
         self._changed()
@@ -792,7 +885,7 @@ class EditorPage(QWidget):
         n["id"] = new_widget(w["type"])["id"]
         n["x"] = int(n.get("x", 0)) + 10
         n["y"] = int(n.get("y", 0)) + 10
-        self.theme.widgets.insert(self.theme.widgets.index(w) + 1, n)
+        self._ws().insert(self._ws().index(w) + 1, n)
         self._refresh_layers()
         self.select(n["id"])
         self._changed()
@@ -802,7 +895,7 @@ class EditorPage(QWidget):
         if not w:
             return
         self._push_undo("del", force=True)
-        self.theme.widgets.remove(w)
+        self._ws().remove(w)
         self._refresh_layers()
         self.select("")
         self._changed()
@@ -811,7 +904,7 @@ class EditorPage(QWidget):
         w = self._widget(self.canvas.sel)
         if not w:
             return
-        lst = self.theme.widgets
+        lst = self._ws()
         i = lst.index(w)
         j = max(0, min(len(lst) - 1, i + delta))
         if i == j:
@@ -830,7 +923,8 @@ class EditorPage(QWidget):
                                         text=f"{self.theme.name} (моя)")
         if not ok or not name.strip():
             return False
-        tid = theme_lib.save_as(self.theme, name.strip())
+        with self._saveable():
+            tid = theme_lib.save_as(self.theme, name.strip())
         t = theme_lib.load(tid)
         self.theme.folder = t.folder
         self.theme.builtin = False
@@ -849,12 +943,28 @@ class EditorPage(QWidget):
             return None
         return self.theme.import_asset(Path(path))
 
+    def _saveable(self):
+        """Автоматическую страницу плеера не сохраняем: пусть и дальше следует за стилем темы."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def ctx():
+            keep = self.theme.player
+            if self._auto_player:
+                self.theme.player = None
+            try:
+                yield
+            finally:
+                self.theme.player = keep
+        return ctx()
+
     def save(self) -> bool:
         if not self.theme:
             return False
         if self.theme.builtin:
             return self.save_as()
-        self.theme.save()
+        with self._saveable():
+            self.theme.save()
         self.dirty = False
         self._update_title()
         self.theme_saved.emit(self.theme_id)
@@ -866,7 +976,8 @@ class EditorPage(QWidget):
         name, ok = QInputDialog.getText(self, "Сохранить как", "Название темы:", text=self.theme.name)
         if not ok or not name.strip():
             return False
-        tid = theme_lib.save_as(self.theme, name.strip())
+        with self._saveable():
+            tid = theme_lib.save_as(self.theme, name.strip())
         t = theme_lib.load(tid)
         self._set_theme(t, tid)
         self.theme_saved.emit(tid)
@@ -909,7 +1020,9 @@ class EditorPage(QWidget):
         folder, builtin = self.theme.folder, self.theme.builtin
         self.theme = Theme.from_dict(d, folder)
         self.theme.builtin = builtin
-        self.renderer = Renderer(self.theme, self.engine.scale_for(self.theme))
+        if self.page == "player" and self.theme.player is None:
+            self._make_auto_player()
+        self.renderer = Renderer(self.theme, self.engine.scale_for(self.theme), page=self.page)
         self._refresh_layers()
         self.select(sel if self._widget(sel) else "")
         self._changed()

@@ -113,34 +113,19 @@ class HomePage(QWidget):
                                                     self._bright_timer.start(120)))
         row.addWidget(self.bright, 1)
         row.addWidget(self.bright_lbl)
+        _sp = QToolButton()
+        _sp.setText("↺")
+        _pol = _sp.sizePolicy()
+        _pol.setRetainSizeWhenHidden(True)
+        _sp.setSizePolicy(_pol)
+        _sp.setVisible(False)
+        row.addWidget(_sp)
         ll.addLayout(row)
 
-        row_s = QHBoxLayout()
-        l_s = QLabel("Размер текста")
-        l_s.setFixedWidth(110)
-        row_s.addWidget(l_s)
-        self.scale = QSlider(Qt.Horizontal)
-        self.scale.setRange(70, 170)
-        self.scale.setSingleStep(5)
-        self.scale.setPageStep(10)
-        self.scale.setToolTip("Крупнее или мельче текст и значки в текущей теме. "
-                              "Запоминается отдельно для каждой темы.")
-        self.scale_lbl = QLabel()
-        self.scale_lbl.setFixedWidth(44)
-        self.scale_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._scale_timer = QTimer(self)
-        self._scale_timer.setSingleShot(True)
-        self._scale_timer.timeout.connect(self._apply_scale)
-        self.scale.valueChanged.connect(lambda v: (self.scale_lbl.setText(f"{v}%"),
-                                                   self._scale_timer.start(150)))
-        row_s.addWidget(self.scale, 1)
-        row_s.addWidget(self.scale_lbl)
-        b_reset = QToolButton()
-        b_reset.setText("↺")
-        b_reset.setToolTip("Вернуть 100%")
-        b_reset.clicked.connect(lambda: self.scale.setValue(100))
-        row_s.addWidget(b_reset)
-        ll.addLayout(row_s)
+        self.scale = self._scale_row(ll, "Подписи", "Размер подписей: «ОЗУ», «ПРОЦЕССОР», «СЕТЬ»… "
+                                     "Запоминается для каждой темы.")
+        self.vscale = self._scale_row(ll, "Показатели", "Размер значений: 54°, 37%, 15.4 ГБ, время, значок "
+                                      "погоды. Запоминается для каждой темы.", reset=True)
         self.sync_scale()
 
         self.flip = QCheckBox("Перевернуть изображение на 180°")
@@ -328,15 +313,52 @@ class HomePage(QWidget):
         self.sync_scale()
         self.win.tray_update()
 
+    def _scale_row(self, parent_layout, title: str, tip: str, reset: bool = False) -> QSlider:
+        row = QHBoxLayout()
+        lbl = QLabel(title)
+        lbl.setFixedWidth(110)
+        lbl.setToolTip(tip)
+        row.addWidget(lbl)
+        sl = QSlider(Qt.Horizontal)
+        sl.setRange(60, 180)
+        sl.setSingleStep(5)
+        sl.setPageStep(10)
+        sl.setToolTip(tip)
+        val = QLabel()
+        val.setFixedWidth(44)
+        val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        sl.valueChanged.connect(lambda v, val=val: (val.setText(f"{v}%"), self._scale_timer.start(150)))
+        sl.value_label = val  # type: ignore[attr-defined]
+        row.addWidget(sl, 1)
+        row.addWidget(val)
+        b = QToolButton()
+        b.setText("↺")
+        b.setToolTip("Вернуть 100% для подписей и показателей")
+        b.clicked.connect(lambda: (self.scale.setValue(100), self.vscale.setValue(100)))
+        row.addWidget(b)
+        if not reset:  # невидимая кнопка держит место — ползунки одной длины
+            pol = b.sizePolicy()
+            pol.setRetainSizeWhenHidden(True)
+            b.setSizePolicy(pol)
+            b.setVisible(False)
+        parent_layout.addLayout(row)
+        if not hasattr(self, "_scale_timer"):
+            self._scale_timer = QTimer(self)
+            self._scale_timer.setSingleShot(True)
+            self._scale_timer.timeout.connect(self._apply_scale)
+        return sl
+
     def sync_scale(self) -> None:
-        v = int(round(self.engine.scale_for(self.engine.theme) * 100))
-        self.scale.blockSignals(True)
-        self.scale.setValue(v)
-        self.scale.blockSignals(False)
-        self.scale_lbl.setText(f"{v}%")
+        labels, values = self.engine.scale_for(self.engine.theme)
+        for sl, v in ((self.scale, labels), (self.vscale, values)):
+            v = int(round(v * 100))
+            sl.blockSignals(True)
+            sl.setValue(v)
+            sl.blockSignals(False)
+            sl.value_label.setText(f"{v}%")
 
     def _apply_scale(self) -> None:
-        self.engine.set_text_scale(self.scale.value() / 100)
+        self.engine.set_scales(self.scale.value() / 100, self.vscale.value() / 100)
         self.engine.settings.save()
 
     def _edit_current(self) -> None:
@@ -511,12 +533,21 @@ class SettingsPage(QScrollArea):
         f.addRow("COM-порт", pr)
         self.found = label("", "muted")
         f.addRow("", self.found)
-        self.fps = QComboBox()
-        for v, t in ((1.0, "1 кадр/с — меньше нагрузка"), (2.0, "2 кадра/с"), (4.0, "4 кадра/с — плавнее")):
-            self.fps.addItem(t, v)
-        self.fps.setCurrentIndex(max(0, self.fps.findData(self.s.fps_limit)))
-        self.fps.currentIndexChanged.connect(lambda: self._set("fps_limit", self.fps.currentData()))
-        f.addRow("Частота обновления", self.fps)
+        sm = QHBoxLayout()
+        self.smooth_cb = QCheckBox("Плавные переходы значений")
+        self.smooth_cb.setToolTip("Полосы, дуги и цифры не прыгают, а плавно доезжают до нового значения")
+        self.smooth_cb.setChecked(self.s.smooth)
+        self.smooth_cb.toggled.connect(lambda on: (self._set("smooth", on), self.anim.setEnabled(on)))
+        sm.addWidget(self.smooth_cb)
+        self.anim = QComboBox()
+        for v, t in ((5, "5 кадров/с — меньше нагрузка"), (8, "8 кадров/с"), (12, "12 кадров/с — плавнее")):
+            self.anim.addItem(t, v)
+        self.anim.setCurrentIndex(max(0, self.anim.findData(self.s.anim_fps)))
+        self.anim.currentIndexChanged.connect(lambda: self._set("anim_fps", self.anim.currentData()))
+        self.anim.setEnabled(self.s.smooth)
+        sm.addWidget(self.anim)
+        sm.addStretch(1)
+        f.addRow("Анимация", sm)
         self.chunk = QSpinBox()
         self.chunk.setRange(0, 65536)
         self.chunk.setSingleStep(64)
@@ -677,8 +708,35 @@ class SettingsPage(QScrollArea):
         self.toast_cb.setChecked(self.s.media_toast)
         self.toast_cb.toggled.connect(lambda on: self._set("media_toast", on))
         f.addRow(self.toast_cb)
+        self.player_cb = QCheckBox("Режим плеера: пока играет музыка, показывать страницу плеера темы (пластинку)")
+        self.player_cb.setToolTip("Страницу плеера можно настроить для каждой темы в редакторе: «Страница → Плеер»")
+        self.player_cb.setChecked(self.s.player_mode)
+        self.player_cb.toggled.connect(lambda on: self._set("player_mode", on))
+        f.addRow(self.player_cb)
+        pr = QHBoxLayout()
+        pr.addWidget(QLabel("Возвращаться к теме через"))
+        self.p_delay = QSpinBox()
+        self.p_delay.setRange(0, 600)
+        self.p_delay.setSuffix(" с после паузы")
+        self.p_delay.setValue(self.s.player_delay)
+        self.p_delay.valueChanged.connect(lambda v: self._set("player_delay", int(v)))
+        pr.addWidget(self.p_delay)
+        pr.addSpacing(12)
+        self.p_game = QCheckBox("и во время игры")
+        self.p_game.setToolTip("Обычно в игре экран показывает FPS, а не плеер")
+        self.p_game.setChecked(self.s.player_in_game)
+        self.p_game.toggled.connect(lambda on: self._set("player_in_game", on))
+        pr.addWidget(self.p_game)
+        pr.addStretch(1)
+        f.addRow(pr)
+        mr = QHBoxLayout()
         self.media_lbl = label("", "muted")
-        f.addRow(self.media_lbl)
+        mr.addWidget(self.media_lbl, 1)
+        b_mdiag = QPushButton("Проверить плееры")
+        b_mdiag.setToolTip("Показать, какие плееры и треки сейчас видит Windows")
+        b_mdiag.clicked.connect(self._media_diag)
+        mr.addWidget(b_mdiag)
+        f.addRow(mr)
 
         self.alert_cb = QCheckBox("Предупреждать о перегреве")
         self.alert_cb.setChecked(self.s.alert_enabled)
@@ -913,10 +971,28 @@ class SettingsPage(QScrollArea):
         self.s.save()
         QTimer.singleShot(500, self.refresh_fps)
 
+    def _media_diag(self) -> None:
+        m = self.engine.media
+        if m is None:
+            QMessageBox.information(self, "Плееры", "Функция «Сейчас играет» выключена.")
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            lines = m.diagnose()
+        finally:
+            QApplication.restoreOverrideCursor()
+        text = "\n".join("• " + x for x in lines)
+        QMessageBox.information(
+            self, "Плееры, которые видит Windows",
+            text + "\n\nЕсли вашего плеера нет в списке, он не сообщает Windows о треке. "
+            "Проверьте, виден ли трек в панели громкости Windows (Win+A). В браузере должно быть включено "
+            "«управление мультимедиа» (по умолчанию включено).")
+
     def _media_toggled(self, on: bool) -> None:
         self.engine.set_media_enabled(on)
         self.s.save()
         self.toast_cb.setEnabled(on)
+        self.player_cb.setEnabled(on)
         QTimer.singleShot(1500, self.refresh_media)
 
     def _alert_toggled(self, on: bool, save: bool = True) -> None:

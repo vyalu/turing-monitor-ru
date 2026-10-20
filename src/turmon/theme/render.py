@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import functools
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -87,24 +88,42 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
 
 
 class Renderer:
-    def __init__(self, theme: Theme, text_scale: float = 1.0) -> None:
+    def __init__(self, theme: Theme, text_scale: float | tuple[float, float] = 1.0, page: str = "main") -> None:
         self.theme = theme
+        self.page = page  # "main" или "player"
         # «крупнее/мельче» для всей темы: увеличивает текст и значки погоды,
         # точка привязки (левый/центр/правый край, верх строки) остаётся на месте
-        self.text_scale = text_scale
+        # масштаб может быть одним числом или парой (подписи, показатели)
+        if isinstance(text_scale, (tuple, list)):
+            self.label_scale, self.value_scale = float(text_scale[0]), float(text_scale[1])
+        else:
+            self.label_scale = self.value_scale = float(text_scale)
         self.bboxes: dict[str, BBox] = {}
         self._bg_key: tuple | None = None
         self._bg: Image.Image | None = None
 
     # ---- фон ----
+    def page_data(self) -> dict[str, Any]:
+        """Фон и элементы текущей страницы. Страница плеера без своей разметки собирается сама."""
+        t = self.theme
+        if self.page == "player" and t.player is None:
+            from .player import auto_page
+
+            key = (id(t), t.landscape, len(t.widgets), t.background, t.background_image)
+            if getattr(self, "_auto_key", None) != key:
+                self._auto_page, self._auto_key = auto_page(t), key
+            return self._auto_page
+        return t.page(self.page)
+
     def _background(self) -> Image.Image:
         t = self.theme
+        pg = self.page_data()
         w, h = t.size
-        path = t.asset(t.background_image)
-        key = (t.background, str(path), path.stat().st_mtime if path else 0, t.landscape)
+        path = t.asset(pg.get("background_image", ""))
+        key = (pg.get("background"), str(path), path.stat().st_mtime if path else 0, t.landscape)
         if key != self._bg_key or self._bg is None:
             # холст в RGB: ImageDraw с режимом "RGBA" правильно смешивает полупрозрачные цвета
-            bg = Image.new("RGB", (w * SS, h * SS), parse_color(t.background, (0, 0, 0, 255))[:3])
+            bg = Image.new("RGB", (w * SS, h * SS), parse_color(pg.get("background"), (0, 0, 0, 255))[:3])
             if path:
                 im = load_image(path, w * SS, h * SS, "cover")
                 if im is not None:
@@ -118,7 +137,7 @@ class Renderer:
         history = history or {}
         canvas = self._background()
         self.bboxes = {}
-        for w in self.theme.widgets:
+        for w in self.page_data()["widgets"]:
             if not w.get("visible", True) or (skip and w.get("id") in skip):
                 continue
             cond = w.get("show_if")
@@ -162,7 +181,9 @@ class Renderer:
         if not text:
             return None
         base_size = max(4, int(round(num(w.get("size"), 20))))
-        size = max(4, int(round(base_size * self.text_scale)))
+        # подписи («ОЗУ», «ПРОЦЕССОР») и показатели («54°», «37%») масштабируются отдельно
+        k = self.value_scale if "{" in str(w.get("text", "")) else self.label_scale
+        size = max(4, int(round(base_size * k)))
         fname = str(w.get("font") or fonts.DEFAULT)
         font = fonts.get(fname, size * SS)
         color = parse_color(w.get("color"), (255, 255, 255, 255))
@@ -442,7 +463,7 @@ class Renderer:
     def _w_weather_icon(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
         s0 = num(w.get("size"), 64) * SS
-        s = s0 * self.text_scale
+        s = s0 * self.value_scale
         x, y = x - (s - s0) / 2, y - (s - s0) / 2  # от центра значка
         kind = str(values.get(w.get("source") or "weather.icon") or "")
         draw_weather_icon(img, (x, y, s), kind,
@@ -458,3 +479,19 @@ class Renderer:
         draw_cover(img, (x, y, s, s), values.get("media.cover"), num(w.get("radius"), 12) * SS,
                    parse_color(w.get("placeholder")))
         return (x, y, x + s, y + s)
+
+    def _w_vinyl(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
+        from .player import draw_vinyl
+
+        x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
+        size = num(w.get("size"), 220) * SS
+        playing = bool(values.get("media.playing")) and bool(values.get("media.title"))
+        angle = 0.0
+        if w.get("rotate", True) and playing:
+            angle = (time.monotonic() * num(w.get("speed"), 40)) % 360
+        draw_vinyl(img, (x, y), int(size), values.get("media.cover"), angle,
+                   parse_color(w.get("color"), (17, 18, 22, 255)),
+                   parse_color(w.get("groove"), (255, 255, 255, 20)),
+                   parse_color(w.get("accent"), (79, 195, 247, 255)),
+                   num(w.get("label"), 46) / 100.0, bool(w.get("shine", True)))
+        return (x, y, x + size, y + size)

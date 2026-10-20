@@ -126,6 +126,19 @@ WIDGETS: dict[str, dict[str, Any]] = {
             Field("opacity", "Непрозрачность, %", "int", 100, lo=0, hi=100),
         ),
     },
+    "vinyl": {
+        "label": "Пластинка",
+        "fields": _POS + (
+            Field("size", "Диаметр", "int", 220, lo=40, hi=1000),
+            Field("rotate", "Вращать, пока играет", "bool", True),
+            Field("speed", "Скорость, градусов в секунду", "float", 40.0, lo=1, hi=360),
+            Field("label", "Размер обложки в центре, %", "int", 46, lo=10, hi=90),
+            Field("color", "Цвет диска", "color", "#111216"),
+            Field("groove", "Цвет дорожек", "color", "#FFFFFF14"),
+            Field("accent", "Ободок и метка без обложки", "color", "#4FC3F7"),
+            Field("shine", "Блик", "bool", True),
+        ),
+    },
     "cover": {
         "label": "Обложка трека",
         "fields": _POS + (
@@ -196,6 +209,14 @@ def widget_title(w: dict[str, Any]) -> str:
     return label
 
 
+def _player_from(d: Any) -> dict[str, Any] | None:
+    if not isinstance(d, dict):
+        return None
+    return {"background": d.get("background", "#000000"),
+            "background_image": d.get("background_image", ""),
+            "widgets": [normalized(w) for w in d.get("widgets", [])]}
+
+
 @dataclass
 class Theme:
     name: str = "Новая тема"
@@ -207,6 +228,14 @@ class Theme:
     refresh: float = 1.0
     folder: Path | None = None
     builtin: bool = False
+    # страница плеера: {"background", "background_image", "widgets"}; None — собирается автоматически
+    player: dict[str, Any] | None = None
+
+    def page(self, name: str = "main") -> dict[str, Any]:
+        """Фон и элементы страницы ("main" или "player")."""
+        if name == "player" and self.player is not None:
+            return self.player
+        return {"background": self.background, "background_image": self.background_image, "widgets": self.widgets}
 
     @property
     def size(self) -> tuple[int, int]:
@@ -230,6 +259,7 @@ class Theme:
             "background_image": self.background_image,
             "refresh": self.refresh,
             "widgets": self.widgets,
+            **({"player": self.player} if self.player is not None else {}),
         }
 
     @classmethod
@@ -243,6 +273,7 @@ class Theme:
             refresh=float(d.get("refresh", 1.0)),
             widgets=[normalized(w) for w in d.get("widgets", [])],
             folder=folder,
+            player=_player_from(d.get("player")),
         )
 
     @classmethod
@@ -271,7 +302,12 @@ class Theme:
 
     def asset_refs(self) -> list[str]:
         refs = [self.background_image] if self.background_image else []
-        refs += [w["path"] for w in self.widgets if w.get("type") == "image" and w.get("path")]
+        ws = list(self.widgets)
+        if self.player:
+            if self.player.get("background_image"):
+                refs.append(self.player["background_image"])
+            ws += self.player.get("widgets", [])
+        refs += [w["path"] for w in ws if w.get("type") == "image" and w.get("path")]
         return refs
 
     def import_asset(self, src: Path) -> str:

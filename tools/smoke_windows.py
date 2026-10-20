@@ -52,15 +52,27 @@ def main() -> int:
 
         from turmon.sensors.media import MediaProvider
 
+        import subprocess
+
+        demo = subprocess.Popen([sys.executable, str(ROOT / "tools" / "media_demo.py"), "25"])
+        time.sleep(5)
         mp = MediaProvider(Path(tempfile.gettempdir()) / "tm_covers")
+        mp.ready.set()
         mp.start()
-        time.sleep(4)
         vals = {}
-        mp.update(vals)
+        for _ in range(15):
+            time.sleep(1)
+            vals = {}
+            mp.update(vals)
+            if vals.get("media.title"):
+                break
+        diag = mp.diagnose()
         mp.stop()
-        ok = not mp.status
-        annotate("notice" if ok else "error", "media", f"статус: {mp.status or 'ок'}; данные: {vals or 'ничего не играет'}")
-        if not ok:
+        demo.kill()
+        found = vals.get("media.title") == "Тестовый трек"
+        annotate("notice" if found else "warning", "media",
+                 f"статус: {mp.status or 'ок'}; найдено: {vals or 'ничего'}\nсеансы: " + "; ".join(diag))
+        if mp.status:
             return 1
     except Exception as e:  # noqa: BLE001
         annotate("error", "media", f"медиа: {e}")
