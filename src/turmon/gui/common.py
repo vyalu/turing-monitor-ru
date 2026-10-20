@@ -55,6 +55,10 @@ QMenu::item:selected {{ background: #2A3342; }}
 QGroupBox {{ border: 1px solid #262B34; border-radius: 10px; margin-top: 14px; padding: 10px; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; color: #AAB2C0; }}
 QTabWidget::pane {{ border: none; }}
+QTabBar::tab {{ background: transparent; color: #AAB2C0; padding: 7px 16px; margin-right: 4px;
+    border: 1px solid #2C323D; border-radius: 8px; }}
+QTabBar::tab:selected {{ background: #2A3342; color: #FFFFFF; border-color: {ACCENT}; }}
+QTabBar::tab:hover:!selected {{ background: #1F242D; }}
 """
 
 

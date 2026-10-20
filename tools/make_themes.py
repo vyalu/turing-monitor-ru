@@ -393,7 +393,164 @@ def big_landscape():
     save_theme("big_landscape", "Крупно (альбомная)", True, ws, "#0E1016", bg)
 
 
+# ---------- 9. Спидометры (альбом) ----------
+def gauges():
+    bg = gradient((480, 320), (16, 18, 24), (6, 7, 10))
+    bg = _add(bg, _blur_dot((480, 320), 120, 150, 150, (0, 50, 70)), 0.6)
+    bg = _add(bg, _blur_dot((480, 320), 360, 150, 150, (70, 20, 40)), 0.6)
+    ws = []
+    for cx, lab, src, temp, c1, c2, al, tal in (
+            (120, "CPU", "cpu.load", "cpu.temp", "#00E5FF", "#2979FF", 90, 85),
+            (360, "GPU", "gpu.load", "gpu.temp", "#FF4081", "#FF9100", 95, 83)):
+        x = cx - 105
+        ws += [
+            ARC(x, 22, 210, src, "#FFFFFF10", "", 4, bg="", start=-135, sweep=270, round=False, max=0.0001),
+            ARC(x + 12, 34, 186, src, c1, c2, 16, bg="#FFFFFF12", start=-135, sweep=270, alert_above=al),
+            T(cx, 82, "{" + temp + ":.0f}°", 58, "#FFFFFF", "Roboto-Black", "center", alert_above=tal),
+            T(cx, 152, "{" + src + ":.0f}%", 22, c1, "Roboto-Bold", "center"),
+            T(cx, 196, lab, 16, "#8A93A6", "Roboto-Black", "center"),
+        ]
+    ws += [
+        T(120, 236, "{cpu.freq:.2f} ГГц · {cpu.power:.0f} Вт", 14, "#B8C2D6", "Roboto-Medium", "center"),
+        T(360, 236, "{gpu.freq:.0f} МГц · {gpu.power:.0f} Вт", 14, "#B8C2D6", "Roboto-Medium", "center"),
+        RECT(10, 264, 460, 46, "#FFFFFF0C", 14),
+        T(26, 276, "ОЗУ {ram.load:.0f}%", 17, "#FFFFFF", "Roboto-Bold"),
+        BAR(130, 284, 90, 6, "ram.load", "#69F0AE", radius=3, alert_above=90),
+        T(240, 276, "↓ {net.down:speed}", 16, "#00E5FF", "Roboto-Bold"),
+        T(456, 272, "{time.hm}", 24, "#FFFFFF", "Roboto-Black", "right"),
+    ]
+    save_theme("gauges", "Спидометры", True, ws, "#0C0E12", bg)
+
+
+# ---------- 10. Закат (портрет) ----------
+def sunset():
+    bg = gradient((320, 480), (255, 120, 90), (60, 20, 90))
+    bg = _add(bg, _blur_dot((320, 480), 160, 120, 120, (90, 60, 0)), 0.5)
+    d = ImageDraw.Draw(bg)
+    for i, (y, c) in enumerate(((300, (40, 14, 60)), (330, (30, 10, 48)), (365, (20, 6, 36)))):
+        pts = [(x, y + 18 * math.sin(x / (50 + i * 17) + i)) for x in range(0, 321, 8)]
+        d.polygon(pts + [(320, 480), (0, 480)], fill=c)
+    W_ = "#FFFFFF"
+    ws = [
+        T(160, 26, "{time.hm}", 76, W_, "Roboto-Thin", "center", shadow=True, shadow_color="#00000055"),
+        T(160, 116, "{date.weekday}, {date.long}", 16, "#FFE3D6", "Roboto-Medium", "center"),
+        ICON(100, 150, 46, accent="#FFF3B0"),
+        T(214, 154, "{weather.temp:.0f}°", 34, W_, "Roboto-Light", "center"),
+        RECT(16, 314, 288, 150, "#00000038", 20),
+    ]
+    for i, (lab, src, extra) in enumerate((("CPU", "cpu.load", "{cpu.temp:.0f}°"),
+                                           ("GPU", "gpu.load", "{gpu.temp:.0f}°"),
+                                           ("ОЗУ", "ram.load", "{ram.used:.0f} ГБ"))):
+        y = 328 + i * 44
+        ws += [
+            T(32, y, lab, 15, "#FFC4B0", "Roboto-Bold"),
+            BAR(82, y + 8, 132, 8, src, "#FFB199", "#FF6E7F", bg="#FFFFFF22", radius=4, alert_above=92),
+            T(288, y - 2, "{" + src + ":.0f}%", 18, W_, "Roboto-Bold", "right"),
+            T(288, y + 20, extra, 11, "#FFC4B0", "Roboto-Medium", "right"),
+        ]
+    save_theme("sunset", "Закат", False, ws, "#3C145A", bg)
+
+
+# ---------- 11. Ретро-табло (альбом) ----------
+def retro():
+    bg = Image.new("RGB", (480, 320), (18, 10, 4))
+    d = ImageDraw.Draw(bg)
+    for y in range(0, 320, 2):
+        d.line((0, y, 480, y), fill=(22, 13, 5))
+    bg = _add(bg, _blur_dot((480, 320), 240, 160, 240, (50, 25, 0)), 0.5)
+    A, D = "#FFB000", "#7A4E00"
+    F = "DejaVuSansMono-Bold"
+    ws = [
+        RECT(8, 8, 464, 304, "", 6, border="#FFB00055", border_width=2),
+        T(24, 18, "СИСТЕМНОЕ ТАБЛО", 14, D, F),
+        T(456, 18, "{date.short}", 14, D, F, "right"),
+        T(24, 44, "{time.hms}", 60, A, F, shadow=True, shadow_color="#FFB00033"),
+    ]
+    for i, (lab, val, src, al) in enumerate((("ЦП", "{cpu.load:3.0f}% {cpu.temp:3.0f}°", "cpu.load", 90),
+                                             ("ВК", "{gpu.load:3.0f}% {gpu.temp:3.0f}°", "gpu.load", 95),
+                                             ("ОЗУ", "{ram.load:3.0f}% {ram.used:4.1f}Г", "ram.load", 90))):
+        y = 132 + i * 46
+        ws += [
+            T(24, y, lab, 22, D, F),
+            T(90, y, val, 22, A, F, alert_above=None),
+            BAR(330, y + 8, 126, 14, src, A, bg="#FFB00018", radius=0, segments=12, gap=3, alert_above=al),
+        ]
+    ws += [
+        T(24, 278, "СЕТЬ ↓{net.down:speed} ↑{net.up:speed}", 14, D, F),
+        T(456, 278, "{weather.temp:+.0f}°", 14, A, F, "right"),
+    ]
+    save_theme("retro", "Ретро-табло", True, ws, "#120A04", bg)
+
+
+# ---------- 12. Стекло (портрет) ----------
+def glass():
+    bg = gradient((320, 480), (20, 40, 80), (10, 12, 30))
+    bg = _add(bg, _blur_dot((320, 480), 60, 120, 110, (0, 140, 160)), 0.7)
+    bg = _add(bg, _blur_dot((320, 480), 280, 300, 120, (120, 40, 200)), 0.7)
+    bg = _add(bg, _blur_dot((320, 480), 90, 440, 100, (200, 60, 120)), 0.5)
+    G = "#FFFFFF1C"
+    B = "#FFFFFF33"
+    ws = [
+        T(20, 14, "{time.hm}", 44, "#FFFFFF", "Roboto-Bold"),
+        T(300, 22, "{date.weekday_short}", 16, "#D6E4FF", "Roboto-Medium", "right"),
+        T(300, 44, "{date.long}", 14, "#AFC3EA", "Roboto-Regular", "right"),
+        RECT(12, 76, 144, 150, G, 20, border=B), RECT(164, 76, 144, 150, G, 20, border=B),
+        ARC(34, 92, 100, "cpu.load", "#7CF7FF", "#3D8BFF", 9, bg="#FFFFFF1A", alert_above=90),
+        T(84, 124, "{cpu.load:.0f}%", 24, "#FFFFFF", "Roboto-Black", "center"),
+        T(84, 196, "CPU {cpu.temp:.0f}°", 15, "#FFFFFF", "Roboto-Bold", "center", alert_above=85),
+        ARC(186, 92, 100, "gpu.load", "#FF9CEE", "#B967FF", 9, bg="#FFFFFF1A", alert_above=95),
+        T(236, 124, "{gpu.load:.0f}%", 24, "#FFFFFF", "Roboto-Black", "center"),
+        T(236, 196, "GPU {gpu.temp:.0f}°", 15, "#FFFFFF", "Roboto-Bold", "center", alert_above=83),
+        RECT(12, 234, 296, 74, G, 20, border=B),
+        T(28, 244, "Память", 13, "#D6E4FF", "Roboto-Medium"),
+        T(292, 242, "{ram.used:.1f} / {ram.total:.0f} ГБ", 16, "#FFFFFF", "Roboto-Bold", "right"),
+        BAR(28, 274, 264, 10, "ram.load", "#7CF7FF", "#B967FF", bg="#FFFFFF1A", radius=5, alert_above=90),
+        RECT(12, 316, 296, 74, G, 20, border=B),
+        T(28, 326, "Сеть", 13, "#D6E4FF", "Roboto-Medium"),
+        T(292, 324, "↓ {net.down:speed}", 16, "#FFFFFF", "Roboto-Bold", "right"),
+        GRAPH(28, 350, 264, 30, "net.down", "#7CF7FF", "#7CF7FF33", max=None, points=80, line=1.4),
+        RECT(12, 398, 296, 72, G, 20, border=B),
+        ICON(24, 406, 56),
+        T(92, 408, "{weather.temp:.0f}°", 30, "#FFFFFF", "Roboto-Bold"),
+        T(92, 446, "{weather.desc}", 13, "#D6E4FF", "Roboto-Medium"),
+        T(292, 412, "{weather.min:.0f}…{weather.max:.0f}°", 13, "#AFC3EA", "Roboto-Medium", "right"),
+    ]
+    save_theme("glass", "Стекло", False, ws, "#141E40", bg)
+
+
+# ---------- 13. Неон (альбом) ----------
+def neon_land():
+    bg = gradient((480, 320), (10, 13, 30), (20, 9, 38))
+    bg = _add(bg, _blur_dot((480, 320), 60, 60, 130, (0, 110, 150)), 0.6)
+    bg = _add(bg, _blur_dot((480, 320), 440, 280, 150, (140, 20, 110)), 0.5)
+    bg = noise(bg, 3, 5)
+    ws = [
+        ARC(16, 24, 150, "cpu.load", "#00E5FF", "#7C4DFF", 12, alert_above=90),
+        T(91, 66, "{cpu.temp:.0f}°", 40, "#FFFFFF", "Roboto-Black", "center", alert_above=85),
+        T(91, 116, "CPU {cpu.load:.0f}%", 13, MUTED, "Roboto-Bold", "center"),
+        ARC(178, 24, 150, "gpu.load", "#FF4081", "#FFAB40", 12, alert_above=95),
+        T(253, 66, "{gpu.temp:.0f}°", 40, "#FFFFFF", "Roboto-Black", "center", alert_above=83),
+        T(253, 116, "GPU {gpu.load:.0f}%", 13, MUTED, "Roboto-Bold", "center"),
+        T(464, 20, "{time.hm}", 44, "#FFFFFF", "Roboto-Black", "right"),
+        T(464, 72, "{date.weekday_short}, {date.long}", 14, MUTED, "Roboto-Medium", "right"),
+        ICON(350, 100, 40), T(464, 104, "{weather.temp:.0f}°", 26, "#FFFFFF", "Roboto-Bold", "right"),
+        T(20, 196, "ОЗУ", 13, MUTED, "Roboto-Medium"),
+        T(224, 194, "{ram.used:.1f} ГБ", 15, "#FFFFFF", "Roboto-Bold", "right"),
+        BAR(20, 218, 204, 8, "ram.load", "#00E5FF", "#7C4DFF", radius=4, alert_above=90),
+        T(20, 238, "ВИДЕОПАМЯТЬ", 13, MUTED, "Roboto-Medium"),
+        T(224, 236, "{gpu.mem_used:.1f} ГБ", 15, "#FFFFFF", "Roboto-Bold", "right"),
+        BAR(20, 260, 204, 8, "gpu.mem_load", "#FF4081", "#FFAB40", radius=4),
+        T(20, 280, "ДИСК {disk.free:.0f} ГБ свободно", 13, MUTED, "Roboto-Medium"),
+        RECT(240, 190, 228, 118, "#FFFFFF0C", 14),
+        T(254, 198, "↓ {net.down:speed}", 15, "#00E5FF", "Roboto-Bold"),
+        T(456, 198, "↑ {net.up:speed}", 15, "#FF80AB", "Roboto-Bold", "right"),
+        GRAPH(254, 226, 202, 72, "net.down", "#00E5FF", "#00E5FF33", max=None, points=80, line=1.6),
+    ]
+    save_theme("neon_land", "Неон (альбомная)", True, ws, "#0A0D1E", bg)
+
+
 if __name__ == "__main__":
-    for fn in (neon, cards, minimal, rings, clock_weather, terminal, big_portrait, big_landscape):
+    for fn in (neon, cards, minimal, rings, clock_weather, terminal, big_portrait, big_landscape,
+               gauges, sunset, retro, glass, neon_land):
         fn()
         print("ok", fn.__name__)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QComboBox, QFileDialog, QFormLayout, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QComboBox, QFileDialog, QFormLayout, QFrame,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
                                QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QSpinBox, QStackedWidget, QSystemTrayIcon,
@@ -65,6 +65,18 @@ class HomePage(QWidget):
         ll.addWidget(label("Мини-экран", "h1"))
         self.status = label("…", "status_bad")
         ll.addWidget(self.status)
+        self.pawn_box = QFrame()
+        self.pawn_box.setStyleSheet("QFrame{background:#3A2A12; border:1px solid #6B4B1C; border-radius:8px;}"
+                                    "QLabel{color:#FFD49A; border:none; background:transparent;}")
+        pb = QHBoxLayout(self.pawn_box)
+        pb.setContentsMargins(10, 6, 6, 6)
+        pb.addWidget(label("Температура процессора недоступна: нужен драйвер PawnIO."), 1)
+        self.b_pawn = QPushButton("Установить")
+        self.b_pawn.setObjectName("primary")
+        self.b_pawn.clicked.connect(self.win.install_pawnio)
+        pb.addWidget(self.b_pawn)
+        self.pawn_box.setVisible(False)
+        ll.addWidget(self.pawn_box)
         self.preview = QLabel()
         self.preview.setAlignment(Qt.AlignCenter)
         self.preview.setMinimumHeight(500)
@@ -145,6 +157,15 @@ class HomePage(QWidget):
         rl.addWidget(label("Нажмите на тему, чтобы вывести её на экран. Двойной щелчок — редактировать.",
                            "muted"))
 
+        self.sections = QTabBar()
+        self.sections.setExpanding(False)
+        self.sections.setDrawBase(False)
+        for t in ("Встроенные", "Мои", "Из TURZX"):
+            self.sections.addTab(t)
+        self.sections.currentChanged.connect(lambda _i: self._fill_gallery())
+        rl.addWidget(self.sections)
+        self._thumbs: list[tuple] = []
+
         self.gallery = QListWidget()
         self.gallery.setViewMode(QListView.IconMode)
         self.gallery.setIconSize(QSize(200, 200))
@@ -176,24 +197,59 @@ class HomePage(QWidget):
         self.reload_gallery()
 
     # ---- галерея ----
+    SECTION_KEYS = ("builtin", "user", "imported")
+    SECTION_NAMES = ("Встроенные", "Мои", "Из TURZX")
+    EMPTY_TEXT = {
+        "user": "Здесь будут ваши темы. Сделайте копию любой встроенной темы или нажмите «Новая» в редакторе.",
+        "imported": "Здесь будут темы из TURZX. Нажмите «Импорт из TURZX…» и выберите файлы *.data.",
+    }
+
     def reload_gallery(self) -> None:
-        cur = self.engine.settings.theme
-        self.gallery.clear()
+        """Перерисовать миниатюры всех тем и показать текущий раздел."""
         vals = sample_values()
+        self._thumbs = []
         for e in theme_lib.list_themes():
             try:
                 t = theme_lib.load(e.id)
-                img = Renderer(t).render(vals)
+                img = Renderer(t, self.engine.scale_for(t)).render(vals)
             except Exception:  # noqa: BLE001
                 continue
             k = 200 / max(img.size)
-            it = QListWidgetItem(QIcon(pil_to_pixmap(img, k)), e.name + ("" if e.builtin else "  ✎"))
+            self._thumbs.append((e, QIcon(pil_to_pixmap(img, k))))
+        counts = {key: sum(1 for e, _ in self._thumbs if e.section == key) for key in self.SECTION_KEYS}
+        for i, (key, name) in enumerate(zip(self.SECTION_KEYS, self.SECTION_NAMES)):
+            self.sections.setTabText(i, f"{name}  {counts[key]}")
+        cur = next((e for e, _ in self._thumbs if e.id == self.engine.settings.theme), None)
+        want = self.SECTION_KEYS.index(cur.section) if cur else 0
+        if self.sections.currentIndex() != want and getattr(self, "_follow_current", True):
+            self.sections.blockSignals(True)
+            self.sections.setCurrentIndex(want)
+            self.sections.blockSignals(False)
+        self._follow_current = False
+        self._fill_gallery()
+
+    def show_section(self, key: str) -> None:
+        self.sections.setCurrentIndex(self.SECTION_KEYS.index(key))
+
+    def _fill_gallery(self) -> None:
+        key = self.SECTION_KEYS[max(0, self.sections.currentIndex())]
+        cur = self.engine.settings.theme
+        self.gallery.clear()
+        items = [(e, ic) for e, ic in self._thumbs if e.section == key]
+        for e, icon in items:
+            it = QListWidgetItem(icon, e.name.replace(" (TURZX)", ""))
             it.setData(Qt.UserRole, e.id)
-            it.setToolTip(("Встроенная тема" if e.builtin else "Ваша тема") +
-                          (", альбомная" if e.landscape else ", книжная"))
+            kind = {"builtin": "Встроенная тема", "user": "Ваша тема", "imported": "Импорт из TURZX"}[key]
+            it.setToolTip(kind + (", альбомная" if e.landscape else ", книжная"))
             self.gallery.addItem(it)
             if e.id == cur:
                 self.gallery.setCurrentItem(it)
+        if not items:
+            it = QListWidgetItem(self.EMPTY_TEXT.get(key, ""))
+            it.setFlags(Qt.NoItemFlags)
+            it.setSizeHint(QSize(600, 80))
+            self.gallery.addItem(it)
+        self.b_del.setEnabled(key != "builtin")
 
     def _current_id(self) -> str:
         it = self.gallery.currentItem()
@@ -201,6 +257,8 @@ class HomePage(QWidget):
 
     def _choose(self, it: QListWidgetItem) -> None:
         tid = it.data(Qt.UserRole)
+        if not tid:
+            return
         self.engine.set_theme(tid)
         self.engine.settings.save()
         self.sync_scale()
@@ -225,6 +283,7 @@ class HomePage(QWidget):
         t = theme_lib.load(tid)
         new_id = theme_lib.save_as(t, f"{t.name} (копия)")
         self.reload_gallery()
+        self.show_section("user")
         self.edit_requested.emit(new_id)
 
     def _delete(self) -> None:
@@ -276,6 +335,8 @@ class HomePage(QWidget):
         finally:
             QApplication.restoreOverrideCursor()
         self.reload_gallery()
+        if ok:
+            self.show_section("imported")
         msg = f"Импортировано тем: {len(ok)}."
         if bad:
             msg += "\n\nНе удалось:\n" + "\n".join(bad[:10])
@@ -404,6 +465,13 @@ class SettingsPage(QScrollArea):
         self.b_admin.clicked.connect(self.win.relaunch_admin)
         ar.addWidget(self.b_admin)
         f.addRow("Права", ar)
+        dr = QHBoxLayout()
+        self.pawn_lbl = label("", "muted")
+        dr.addWidget(self.pawn_lbl, 1)
+        self.b_pawn2 = QPushButton("Установить драйвер")
+        self.b_pawn2.clicked.connect(self.win.install_pawnio)
+        dr.addWidget(self.b_pawn2)
+        f.addRow("Драйвер CPU", dr)
         self.net = QComboBox()
         self.net.addItem("Все подключения", "")
         for n in list_net_interfaces():
@@ -569,7 +637,22 @@ class SettingsPage(QScrollArea):
         self.s.save()
         self.engine.update_system_options()
 
+    def refresh_pawnio(self) -> None:
+        from ..sensors import pawnio
+
+        if os.name != "nt":
+            self.pawn_lbl.setText("Только для Windows.")
+            self.b_pawn2.setVisible(False)
+            return
+        v = pawnio.installed_version()
+        if v:
+            self.pawn_lbl.setText(f"PawnIO {v} установлен — LibreHardwareMonitor читает температуру и частоты CPU.")
+        else:
+            self.pawn_lbl.setText("PawnIO не установлен. Без него температура и частоты процессора не читаются.")
+        self.b_pawn2.setVisible(not v)
+
     def refresh_admin(self) -> None:
+        self.refresh_pawnio()
         lhm = self.engine.lhm
         if os.name != "nt":
             text = "Расширенные датчики доступны только в Windows."
@@ -644,6 +727,10 @@ class MainWindow(QMainWindow):
         self._status(engine.status)
 
         self._make_tray()
+        self._cpu_timer = QTimer(self)
+        self._cpu_timer.timeout.connect(self.check_cpu_temp)
+        self._cpu_timer.start(5000)
+        QTimer.singleShot(2500, self.check_cpu_temp)
 
     # ---- навигация ----
     def _nav(self, row: int) -> None:
@@ -746,6 +833,48 @@ class MainWindow(QMainWindow):
         self.engine.stop(self.engine.settings.screen_off_on_exit)
         self.engine.settings.save()
         QApplication.quit()
+
+    def check_cpu_temp(self) -> None:
+        """Показать плашку, если датчики CPU есть, а температуры нет и нет драйвера."""
+        lhm = self.engine.lhm
+        show = False
+        if os.name == "nt" and lhm is not None and lhm.available and "cpu.temp" not in self.engine.hub.values:
+            from ..sensors import pawnio
+
+            show = not pawnio.is_installed()
+        self.home.pawn_box.setVisible(show)
+
+    def install_pawnio(self) -> None:
+        from ..sensors import pawnio
+
+        if pawnio.bundled_setup() is None:
+            QMessageBox.information(self, "Драйвер PawnIO",
+                                    f"Установщик драйвера не найден рядом с программой.\n"
+                                    f"Скачайте PawnIO с {pawnio.DOWNLOAD_URL}, установите и перезапустите программу.")
+            winsys.open_url(pawnio.DOWNLOAD_URL)
+            return
+        if QMessageBox.question(
+                self, "Драйвер PawnIO",
+                "Для температуры и частот процессора нужен драйвер PawnIO (открытый и официально подписанный; "
+                "его же использует LibreHardwareMonitor).\n\nУстановить сейчас? Windows может запросить "
+                "разрешение администратора.") != QMessageBox.Yes:
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            ok, msg = pawnio.install()
+            if ok and self.engine.lhm is not None:
+                try:
+                    self.engine.lhm.reopen()
+                except Exception as e:  # noqa: BLE001
+                    msg += f"\nНе удалось переподключить датчики ({e}) — перезапустите программу."
+        finally:
+            QApplication.restoreOverrideCursor()
+        if ok:
+            msg += "\nТемпература процессора появится через пару секунд."
+        QMessageBox.information(self, "Драйвер PawnIO", msg) if ok else \
+            QMessageBox.warning(self, "Драйвер PawnIO", msg)
+        self.settings_page.refresh_pawnio()
+        QTimer.singleShot(3000, self.check_cpu_temp)
 
     def relaunch_admin(self) -> None:
         from .app import SERVER_NAME

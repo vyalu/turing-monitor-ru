@@ -91,3 +91,9 @@ def open_path(path: Path) -> None:
         os.startfile(str(path))  # noqa: S606
     else:
         subprocess.Popen(["xdg-open", str(path)])  # noqa: S603,S607
+
+
+def open_url(url: str) -> None:
+    import webbrowser
+
+    webbrowser.open(url)

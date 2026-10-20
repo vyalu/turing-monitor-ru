@@ -50,6 +50,14 @@ jobs:
           Write-Output "::notice title=lhm files::$files"
           if (-not (Test-Path lhm/LibreHardwareMonitorLib.dll)) { Write-Output "::error title=lhm::нет LibreHardwareMonitorLib.dll%0A$all"; exit 1 }
 
+      - name: Драйвер PawnIO (установщик)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe" -OutFile lhm/PawnIO_setup.exe
+          $sig = Get-AuthenticodeSignature lhm/PawnIO_setup.exe
+          Write-Output "::notice title=pawnio::$((Get-Item lhm/PawnIO_setup.exe).Length) байт, подпись: $($sig.Status) $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne "Valid") { throw "подпись PawnIO_setup.exe недействительна" }
+
       - name: Зависимости
         run: pip install -r requirements.txt pyinstaller pytest
 

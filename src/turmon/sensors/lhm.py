@@ -95,10 +95,29 @@ class LhmProvider(Provider):
         c.IsStorageEnabled = True
         c.IsControllerEnabled = True
         c.Open()
-        self._computer = c
+        with self._lock:
+            self._computer = c
         self._ST = SensorType
+        self.available = True
+        self.status = ""
         if not is_admin():
             self.status = "нет прав администратора: температура CPU может быть недоступна"
+
+    def reopen(self) -> None:
+        """Переоткрыть библиотеку — например, после установки драйвера PawnIO."""
+        with self._lock:
+            old, self._computer = self._computer, None
+        if old is not None:
+            try:
+                old.Close()
+            except Exception:  # noqa: BLE001
+                pass
+        self.start()
+
+    def cpu_temp_missing(self) -> bool:
+        """Датчики температуры CPU есть, но значений нет — нужен драйвер PawnIO."""
+        temps = [s for s in self.sensors() if s.hw_type == "Cpu" and s.kind == "Temperature"]
+        return not temps or all(not s.value for s in temps)
 
     def stop(self) -> None:
         if self._computer is not None:
@@ -119,9 +138,9 @@ class LhmProvider(Provider):
 
     def sensors(self) -> list[SensorInfo]:
         out: list[SensorInfo] = []
-        if self._computer is None:
-            return out
         with self._lock:
+            if self._computer is None:
+                return out
             for top, hw in self._walk():
                 for s in hw.Sensors:
                     val = s.Value

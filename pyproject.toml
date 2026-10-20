@@ -1,6 +1,6 @@
 [project]
 name = "turing-monitor-ru"
-version = "1.0.1"
+version = "1.0.2"
 description = "Свободная программа для мини-экранов Turing Smart Screen 3.5\" с русским интерфейсом"
 readme = "README.md"
 requires-python = ">=3.10"

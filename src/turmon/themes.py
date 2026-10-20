@@ -18,6 +18,11 @@ class ThemeEntry:
     folder: Path
     builtin: bool
     landscape: bool
+    imported: bool = False
+
+    @property
+    def section(self) -> str:
+        return "builtin" if self.builtin else "imported" if self.imported else "user"
 
 
 def _entries(root: Path, prefix: str, builtin: bool) -> list[ThemeEntry]:
@@ -32,8 +37,9 @@ def _entries(root: Path, prefix: str, builtin: bool) -> list[ThemeEntry]:
             d = json.loads(tj.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        imported = not builtin and (f.name.startswith("turzx_") or "TURZX" in str(d.get("author", "")))
         out.append(ThemeEntry(f"{prefix}:{f.name}", d.get("name", f.name), f, builtin,
-                              bool(d.get("landscape"))))
+                              bool(d.get("landscape")), imported))
     return out
 
 
@@ -79,6 +85,9 @@ def save_as(theme: Theme, name: str) -> str:
     folder = unique_user_folder(name)
     t = theme.copy()
     t.name = name
+    if "TURZX" in (t.author or ""):
+        t.author = "на основе импортированной темы"
+        t.name = t.name.replace(" (TURZX)", "")  # копия импортированной темы — уже «своя»
     t.save(folder)  # копирует картинки из старой папки
     return id_of(folder)
 

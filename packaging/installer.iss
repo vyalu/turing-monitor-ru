@@ -47,10 +47,12 @@ Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Ярлыки:"
+Name: "pawnio"; Description: "Установить драйвер PawnIO (нужен для температуры и частот процессора)"; GroupDescription: "Датчики:"; Check: IsAdminInstallMode and not PawnIOInstalled
 Name: "autostart"; Description: "Запускать вместе с Windows (с правами администратора — работают все датчики)"; GroupDescription: "Запуск:"; Check: IsAdminInstallMode
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\lhm\PawnIO_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist; Tasks: pawnio
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -58,6 +60,7 @@ Name: "{autoprograms}\Удалить {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
+Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; Flags: runhidden waituntilterminated skipifdoesntexist; Tasks: pawnio; StatusMsg: "Установка драйвера PawnIO…"
 ; задача планировщика: запуск при входе в систему с наивысшими правами, без запроса UAC
 Filename: "{sys}\schtasks.exe"; \
   Parameters: "/Create /TN ""{#TaskName}"" /TR ""\""{app}\{#AppExe}\"" --minimized"" /SC ONLOGON /RL HIGHEST /DELAY 0000:15 /F"; \
@@ -72,6 +75,12 @@ Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+function PawnIOInstalled(): Boolean;
+begin
+  Result := RegKeyExists(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO') or
+            RegKeyExists(HKLM32, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
+end;
+
 procedure StopRunningApp();
 var
   Code: Integer;
