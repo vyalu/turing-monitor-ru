@@ -56,13 +56,27 @@ def main() -> int:
         if exe is None:
             annotate("warning", "fps", "PresentMon не найден")
         else:
+            import io
+
+            from turmon.sensors.fps import FrameStats, parse_csv_stream, IGNORE
+
+            demo = subprocess.Popen([sys.executable, str(ROOT / "tools" / "fps_demo.py"), "14"])
+            time.sleep(3)
             r = subprocess.run([str(exe), "--output_stdout", "--no_console_stats", "--stop_existing_session",
-                                "--session_name", "TMsmoke", "--timed", "4", "--terminate_after_timed"],
-                               capture_output=True, text=True, timeout=40)
-            head = (r.stdout.splitlines() or [""])[0]
-            ok = "MsBetweenPresents" in head
+                                "--session_name", "TMsmoke", "--timed", "6", "--terminate_after_timed",
+                                "--no_track_gpu", "--no_track_input", "--no_track_display"],
+                               capture_output=True, text=True, timeout=60)
+            demo.kill()
+            lines = r.stdout.splitlines()
+            apps = sorted({ln.split(",")[0] for ln in lines[1:] if "," in ln})
+            IGNORE.discard("python.exe")
+            st = FrameStats()
+            parse_csv_stream(io.StringIO(r.stdout), st)
+            fps = st.stats(demo.pid)
+            ok = "MsBetweenPresents" in (lines[0] if lines else "") and bool(fps)
             annotate("notice" if ok else "error", "fps",
-                     f"код {r.returncode}, строк {len(r.stdout.splitlines())}, заголовок: {head[:300]}\n{r.stderr[:300]}")
+                     f"код {r.returncode}, строк {len(lines)}, приложения: {apps[:10]}\n"
+                     f"демо-окно: {fps}\nзаголовок: {(lines[0] if lines else '')[:200]}\n{r.stderr[:300]}")
             if not ok:
                 return 1
     except Exception as e:  # noqa: BLE001
