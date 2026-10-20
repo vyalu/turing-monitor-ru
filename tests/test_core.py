@@ -128,3 +128,51 @@ def test_nrbf_minimal_class():
     data += bytes([11])
     obj = nrbf.loads(data)
     assert obj.name == "Demo" and obj.fields["a"] == 42 and obj.fields["s"] == "привет"
+
+
+def test_night_schedule_wraps_midnight():
+    import time as _t
+
+    from turmon.config import Settings
+    from turmon.engine import Engine
+
+    s = Settings(night_enabled=True, night_from="23:00", night_to="07:00", brightness=80, night_brightness=10)
+    e = Engine.__new__(Engine)
+    e.settings = s
+    at = lambda h, m=0: _t.struct_time((2026, 10, 20, h, m, 0, 0, 293, -1))  # noqa: E731
+    assert e.is_night(at(23, 30)) and e.is_night(at(3)) and not e.is_night(at(7)) and not e.is_night(at(12))
+    s.night_from, s.night_to = "13:00", "15:00"
+    assert e.is_night(at(14)) and not e.is_night(at(16))
+    s.night_enabled = False
+    assert not e.is_night(at(14))
+
+
+def test_weather_auto_location(monkeypatch):
+    from turmon.sensors import weather as w
+
+    monkeypatch.setattr(w, "locate_by_ip", lambda: w.City("Москва", 55.75, 37.62, "Россия"))
+    seen = {}
+
+    def fake_get(url, timeout=10):
+        seen["url"] = url
+        return {"current": {"temperature_2m": -2.4, "weather_code": 71, "is_day": 1},
+                "daily": {"temperature_2m_max": [0, 1], "temperature_2m_min": [-5, -4], "weather_code": [71, 3]}}
+
+    monkeypatch.setattr(w, "_get", fake_get)
+    p = w.WeatherProvider(None, None, "", auto=True)
+    v = p.fetch()
+    assert "latitude=55.75" in seen["url"]
+    assert v["weather.city"] == "Москва" and v["weather.icon"] == "snow" and round(v["weather.temp"]) == -2
+    assert "автоматически" in p.location_label
+    p2 = w.WeatherProvider(None, None, "", auto=False)
+    assert p2.fetch() == {}
+
+
+def test_design_themes_fit_screen():
+    for tj in sorted((ROOT / "themes").glob("*/theme.json")):
+        t = Theme.load(tj.parent)
+        r = Renderer(t)
+        r.render(sample_values())
+        W, H = t.size
+        for wid, bb in r.bboxes.items():
+            assert bb[0] >= -2 and bb[1] >= -2 and bb[2] <= W + 2 and bb[3] <= H + 2, (tj.parent.name, wid, bb)

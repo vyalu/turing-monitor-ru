@@ -19,10 +19,17 @@ class Settings:
     flip: bool = False                   # экран установлен вверх ногами
     chunk: int = 0                       # размер пакета записи (0 = авто)
     fps_limit: float = 2.0               # не чаще N кадров в секунду
+    night_enabled: bool = False          # ночная яркость по расписанию
+    night_from: str = "23:00"
+    night_to: str = "07:00"
+    night_brightness: int = 15
+    follow_monitor: bool = True          # гасить мини-экран, когда гаснут мониторы
+    check_updates: bool = True
 
     city: str = ""
     lat: float | None = None
     lon: float | None = None
+    weather_auto: bool = True            # без выбранного города — определить по IP
 
     net_iface: str = ""
     disk: str = ""

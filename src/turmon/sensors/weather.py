@@ -73,6 +73,34 @@ def search_city(query: str) -> list[City]:
     return out
 
 
+def locate_by_ip() -> City:
+    """Примерное место по IP-адресу (если город не выбран вручную)."""
+    errors = []
+    for url, parse in (
+        ("https://ipwho.is/?lang=ru&fields=success,city,region,country,latitude,longitude",
+         lambda d: d.get("success") and City(d["city"], float(d["latitude"]), float(d["longitude"]),
+                                              ", ".join(x for x in (d.get("region"), d.get("country")) if x))),
+        ("https://ipapi.co/json/",
+         lambda d: d.get("latitude") is not None and City(d.get("city") or "", float(d["latitude"]),
+                                                          float(d["longitude"]), d.get("country_name") or "")),
+    ):
+        try:
+            c = parse(_get(url, timeout=8))
+            if c:
+                # русское название города, если геокодер его знает
+                try:
+                    for r in search_city(c.name):
+                        if abs(r.lat - c.lat) < 0.6 and abs(r.lon - c.lon) < 0.6:
+                            c = City(r.name, c.lat, c.lon, r.region)
+                            break
+                except Exception:  # noqa: BLE001
+                    pass
+                return c
+        except Exception as e:  # noqa: BLE001
+            errors.append(str(e))
+    raise RuntimeError("не удалось определить место: " + "; ".join(errors))
+
+
 def describe(code: int) -> tuple[str, str]:
     return WMO.get(int(code), ("—", "cloudy"))
 
@@ -81,15 +109,34 @@ class WeatherProvider(BackgroundProvider):
     name = "Погода"
     interval = 15 * 60
 
-    def __init__(self, lat: float | None, lon: float | None, city: str = "") -> None:
+    def __init__(self, lat: float | None, lon: float | None, city: str = "", auto: bool = True) -> None:
         super().__init__()
         self.lat, self.lon, self.city = lat, lon, city
+        self.auto = auto
+        self.auto_city: City | None = None
+        self.last_ok = 0.0
+
+    @property
+    def location_label(self) -> str:
+        if self.lat is not None:
+            return self.city
+        if self.auto_city is not None:
+            return f"{self.auto_city.label} (определено автоматически)"
+        return ""
 
     def fetch(self) -> Values:
-        if self.lat is None or self.lon is None:
-            return {}
+        import time
+
+        lat, lon, city = self.lat, self.lon, self.city
+        if lat is None or lon is None:
+            if not self.auto:
+                self.status = "город не выбран"
+                return {}
+            if self.auto_city is None:
+                self.auto_city = locate_by_ip()
+            lat, lon, city = self.auto_city.lat, self.auto_city.lon, self.auto_city.name
         q = urllib.parse.urlencode({
-            "latitude": self.lat, "longitude": self.lon,
+            "latitude": lat, "longitude": lon,
             "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
                        "wind_speed_10m,wind_direction_10m,is_day,surface_pressure",
             "daily": "temperature_2m_max,temperature_2m_min,weather_code",
@@ -110,7 +157,7 @@ class WeatherProvider(BackgroundProvider):
             "weather.pressure": (cur["surface_pressure"] * 0.750062) if cur.get("surface_pressure") else None,
             "weather.desc": desc,
             "weather.icon": icon,
-            "weather.city": self.city,
+            "weather.city": city,
         }
         daily = d.get("daily", {})
         try:
@@ -122,4 +169,5 @@ class WeatherProvider(BackgroundProvider):
             v["weather.tomorrow_desc"] = describe(daily["weather_code"][1])[0]
         except (KeyError, IndexError, TypeError):
             pass
+        self.last_ok = time.time()
         return {k: x for k, x in v.items() if x is not None}

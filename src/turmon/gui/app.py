@@ -28,6 +28,49 @@ def setup_logging(debug: bool) -> None:
         root.addHandler(logging.StreamHandler())
 
 
+class _Mutex:
+    """Именованный мьютекс Windows: ловит вторую копию даже с другими правами."""
+
+    def __init__(self) -> None:
+        self.handle = None
+
+    def acquire(self, wait: float = 0.0) -> bool:
+        import os
+        import time
+
+        if os.name != "nt":
+            return True
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateMutexW.restype = ctypes.c_void_p
+        k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        deadline = time.monotonic() + wait
+        while True:
+            h = k32.CreateMutexW(None, True, f"Local\\{APP_NAME}-instance")
+            err = ctypes.get_last_error()
+            if h and err != 183:  # ERROR_ALREADY_EXISTS
+                self.handle = h
+                return True
+            if h:
+                k32.CloseHandle(ctypes.c_void_p(h))
+            # 5 = ERROR_ACCESS_DENIED: мьютекс создала копия с правами администратора
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.5)
+
+    def release(self) -> None:
+        if self.handle:
+            import ctypes
+
+            ctypes.windll.kernel32.ReleaseMutex(ctypes.c_void_p(self.handle))
+            ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(self.handle))
+            self.handle = None
+
+
+INSTANCE = _Mutex()
+
+
 def _already_running() -> bool:
     sock = QLocalSocket()
     sock.connectToServer(SERVER_NAME)
@@ -40,10 +83,34 @@ def _already_running() -> bool:
     return False
 
 
+def _start_elevated_via_task(args) -> bool:
+    """Запуск без прав, но есть задача автозапуска с наивысшими правами —
+    запускаем программу через неё (без запроса UAC) и просим показать окно."""
+    import os
+    import time
+
+    if os.name != "nt" or args.wait_previous or args.minimized:
+        return False
+    from .. import winsys
+    from ..sensors.lhm import is_admin
+
+    if is_admin() or winsys.autostart_state() != "task":
+        return False
+    if not winsys.run_task():
+        return False
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if _already_running():
+            return True
+        time.sleep(0.4)
+    return True  # копия с правами запущена, окно откроется по значку в трее
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="turmon")
     ap.add_argument("--minimized", action="store_true", help="запуск свёрнутым в трей")
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--wait-previous", action="store_true", help=argparse.SUPPRESS)
     args, qt_args = ap.parse_known_args(argv if argv is not None else sys.argv[1:])
 
     setup_logging(args.debug)
@@ -53,10 +120,20 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(app_icon())
     app.setQuitOnLastWindowClosed(False)
 
-    if _already_running():
+    if _start_elevated_via_task(args):
+        return 0
+    if not INSTANCE.acquire(wait=20 if args.wait_previous else 0):
+        if not _already_running():  # окно не показалось — копия запущена с другими правами
+            apply_style(app)
+            QMessageBox.information(
+                None, APP_TITLE,
+                "Программа уже запущена — её значок в трее рядом с часами.\n\n"
+                "Если она была запущена от администратора (например, автозапуском), "
+                "откройте её через значок в трее.")
         return 0
     QLocalServer.removeServer(SERVER_NAME)
     server = QLocalServer()
+    server.setSocketOptions(QLocalServer.WorldAccessOption)  # чтобы достучаться и из копии без прав
     server.listen(SERVER_NAME)
     app.single_server = server  # type: ignore[attr-defined]
 
@@ -101,4 +178,5 @@ def main(argv: list[str] | None = None) -> int:
             "• Старые темы можно перенести кнопкой «Импорт из TURZX…».\n"
             "• Город для погоды и автозапуск — в «Настройках».")
     rc = app.exec()
+    INSTANCE.release()
     return rc

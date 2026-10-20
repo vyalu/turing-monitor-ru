@@ -5,9 +5,9 @@ import os
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QComboBox, QFileDialog, QFormLayout, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QTimeEdit, QComboBox, QFileDialog, QFormLayout, QFrame,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
                                QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QSpinBox, QStackedWidget, QSystemTrayIcon,
@@ -208,14 +208,22 @@ class HomePage(QWidget):
         """Перерисовать миниатюры всех тем и показать текущий раздел."""
         vals = sample_values()
         self._thumbs = []
+        cache = getattr(self, "_thumb_cache", {})
+        new_cache = {}
         for e in theme_lib.list_themes():
             try:
                 t = theme_lib.load(e.id)
-                img = Renderer(t, self.engine.scale_for(t)).render(vals)
+                scale = self.engine.scale_for(t)
+                key = (e.id, (e.folder / "theme.json").stat().st_mtime, scale)
+                icon = cache.get(key)
+                if icon is None:
+                    img = Renderer(t, scale).render(vals)
+                    icon = QIcon(pil_to_pixmap(img, 200 / max(img.size)))
             except Exception:  # noqa: BLE001
                 continue
-            k = 200 / max(img.size)
-            self._thumbs.append((e, QIcon(pil_to_pixmap(img, k))))
+            new_cache[key] = icon
+            self._thumbs.append((e, icon))
+        self._thumb_cache = new_cache
         counts = {key: sum(1 for e, _ in self._thumbs if e.section == key) for key in self.SECTION_KEYS}
         for i, (key, name) in enumerate(zip(self.SECTION_KEYS, self.SECTION_NAMES)):
             self.sections.setTabText(i, f"{name}  {counts[key]}")
@@ -442,6 +450,23 @@ class SettingsPage(QScrollArea):
         f.addRow("", self.city_results)
         self.city_cur = label(self._city_text(), "muted")
         f.addRow("Сейчас", self.city_cur)
+        self.w_auto = QCheckBox("Если город не выбран — определять место автоматически (по IP)")
+        self.w_auto.setChecked(self.s.weather_auto)
+        self.w_auto.toggled.connect(self._weather_auto)
+        f.addRow("", self.w_auto)
+        wr = QHBoxLayout()
+        b_wclear = QPushButton("Сбросить город")
+        b_wclear.clicked.connect(self._clear_city)
+        b_wnow = QPushButton("Обновить погоду")
+        b_wnow.clicked.connect(lambda: (self.engine.weather and self.engine.weather.refresh_now(),
+                                        QTimer.singleShot(4000, self._update_weather_status)))
+        wr.addWidget(b_wclear)
+        wr.addWidget(b_wnow)
+        wr.addStretch(1)
+        f.addRow("", wr)
+        self._wtimer = QTimer(self)
+        self._wtimer.timeout.connect(self._update_weather_status)
+        self._wtimer.start(5000)
         self.cities_found.connect(self._show_cities)
         root.addWidget(g)
 
@@ -502,6 +527,40 @@ class SettingsPage(QScrollArea):
         root.addWidget(g)
 
         # --- программа
+        # --- экран: ночной режим и мониторы
+        g = QGroupBox("Яркость и сон экрана")
+        f = QFormLayout(g)
+        self.night = QCheckBox("Ночная яркость по расписанию")
+        self.night.setChecked(self.s.night_enabled)
+        self.night.toggled.connect(lambda on: self._set_night("night_enabled", on))
+        f.addRow(self.night)
+        nr = QHBoxLayout()
+        nr.addWidget(QLabel("с"))
+        self.n_from = QTimeEdit(QTime.fromString(self.s.night_from, "HH:mm"))
+        self.n_from.setDisplayFormat("HH:mm")
+        self.n_from.timeChanged.connect(lambda t: self._set_night("night_from", t.toString("HH:mm")))
+        nr.addWidget(self.n_from)
+        nr.addWidget(QLabel("до"))
+        self.n_to = QTimeEdit(QTime.fromString(self.s.night_to, "HH:mm"))
+        self.n_to.setDisplayFormat("HH:mm")
+        self.n_to.timeChanged.connect(lambda t: self._set_night("night_to", t.toString("HH:mm")))
+        nr.addWidget(self.n_to)
+        nr.addSpacing(16)
+        nr.addWidget(QLabel("яркость"))
+        self.n_bright = QSpinBox()
+        self.n_bright.setRange(0, 100)
+        self.n_bright.setSuffix(" %")
+        self.n_bright.setValue(self.s.night_brightness)
+        self.n_bright.valueChanged.connect(lambda v: self._set_night("night_brightness", int(v)))
+        nr.addWidget(self.n_bright)
+        nr.addStretch(1)
+        f.addRow(nr)
+        self.follow = QCheckBox("Гасить мини-экран, когда гаснут мониторы (простой, блокировка)")
+        self.follow.setChecked(self.s.follow_monitor)
+        self.follow.toggled.connect(self._set_follow)
+        f.addRow(self.follow)
+        root.addWidget(g)
+
         g = QGroupBox("Программа")
         v = QVBoxLayout(g)
         self.autostart = QCheckBox("Запускать вместе с Windows")
@@ -519,7 +578,14 @@ class SettingsPage(QScrollArea):
             cb.setChecked(getattr(self.s, attr))
             cb.toggled.connect(lambda on, a=attr: self._set(a, on))
             v.addWidget(cb)
+        self.upd = QCheckBox("Проверять обновления на GitHub")
+        self.upd.setChecked(self.s.check_updates)
+        self.upd.toggled.connect(lambda on: self._set("check_updates", on))
+        v.addWidget(self.upd)
         lr = QHBoxLayout()
+        b_upd = QPushButton("Проверить сейчас")
+        b_upd.clicked.connect(lambda: self.win.check_updates(manual=True))
+        lr.addWidget(b_upd)
         b_log = QPushButton("Открыть журнал")
         b_log.clicked.connect(lambda: winsys.open_path(log_file()))
         lr.addWidget(b_log)
@@ -540,6 +606,18 @@ class SettingsPage(QScrollArea):
         self.s.save()
         if sys_opts:
             self.engine.update_system_options()
+
+    def _set_night(self, attr: str, value) -> None:
+        setattr(self.s, attr, value)
+        self.s.save()
+        self.engine.refresh_brightness()
+
+    def _set_follow(self, on: bool) -> None:
+        self.s.follow_monitor = on
+        self.s.save()
+        if not on:
+            self.engine.monitor_off = False
+            self.engine._apply_blank()
 
     def _set_text(self, i: int, t: str) -> None:
         setattr(self.s, f"user_text{i}", t)
@@ -562,9 +640,35 @@ class SettingsPage(QScrollArea):
         self.engine.reconnect(self.s.port)
 
     def _city_text(self) -> str:
-        if self.s.lat is None:
-            return "не выбран — погода не показывается"
-        return f"{self.s.city} ({self.s.lat:.2f}, {self.s.lon:.2f})"
+        w = self.engine.weather
+        vals = self.engine.hub.values
+        place = w.location_label if w else ""
+        if not place:
+            if self.s.lat is None and not self.s.weather_auto:
+                return "город не выбран — погода не показывается"
+            place = self.s.city or "определяется…"
+        if "weather.temp" in vals:
+            return f"{place}: {vals['weather.temp']:.0f}°, {vals.get('weather.desc', '')}"
+        if w and w.status and w.status != "город не выбран":
+            return f"{place} — ошибка: {w.status}"
+        return f"{place} — загрузка…"
+
+    def _update_weather_status(self) -> None:
+        if self.isVisible():
+            self.city_cur.setText(self._city_text())
+
+    def _weather_auto(self, on: bool) -> None:
+        self.s.weather_auto = on
+        self.s.save()
+        self.engine.update_weather_location()
+        QTimer.singleShot(3000, self._update_weather_status)
+
+    def _clear_city(self) -> None:
+        self.s.city, self.s.lat, self.s.lon = "", None, None
+        self.s.save()
+        self.engine.update_weather_location()
+        self.city_cur.setText(self._city_text())
+        QTimer.singleShot(4000, self._update_weather_status)
 
     def _search_city(self) -> None:
         q = self.city.text().strip()
@@ -606,6 +710,7 @@ class SettingsPage(QScrollArea):
         self.engine.update_weather_location()
         self.city_cur.setText(self._city_text())
         self.city_results.setVisible(False)
+        QTimer.singleShot(3000, self._update_weather_status)
 
     def _fill_sensors(self) -> None:
         lhm = self.engine.lhm
@@ -686,6 +791,8 @@ class SettingsPage(QScrollArea):
 
 # ---------------------------------------------------------------- окно
 class MainWindow(QMainWindow):
+    update_found = Signal(object, bool)
+
     def __init__(self, engine: Engine) -> None:
         super().__init__()
         self.engine = engine
@@ -731,6 +838,9 @@ class MainWindow(QMainWindow):
         self._cpu_timer.timeout.connect(self.check_cpu_temp)
         self._cpu_timer.start(5000)
         QTimer.singleShot(2500, self.check_cpu_temp)
+        self.update_found.connect(self._on_update)
+        if engine.settings.check_updates:
+            QTimer.singleShot(15000, self.check_updates)
 
     # ---- навигация ----
     def _nav(self, row: int) -> None:
@@ -834,6 +944,41 @@ class MainWindow(QMainWindow):
         self.engine.settings.save()
         QApplication.quit()
 
+    def check_updates(self, manual: bool = False) -> None:
+        from .. import updates
+
+        def work() -> None:
+            try:
+                res = updates.latest()
+            except Exception as e:  # noqa: BLE001
+                res = e
+            self.update_found.emit(res, manual)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update(self, res, manual: bool) -> None:
+        if isinstance(res, tuple):
+            ver, url = res
+            if not manual and not self.isVisible():
+                # программа в трее — не выскакиваем окном, а показываем уведомление
+                self._update_url = url
+                try:
+                    self.tray.messageClicked.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+                self.tray.messageClicked.connect(lambda: winsys.open_url(self._update_url))
+                self.tray.showMessage(APP_TITLE, f"Вышла новая версия {ver}. Нажмите, чтобы скачать.",
+                                      app_icon(), 8000)
+                return
+            r = QMessageBox.question(self, "Обновление", f"Вышла новая версия {ver} (у вас {__version__}).\n"
+                                     "Открыть страницу загрузки?")
+            if r == QMessageBox.Yes:
+                winsys.open_url(url)
+        elif manual:
+            if isinstance(res, Exception):
+                QMessageBox.warning(self, "Обновление", f"Не удалось проверить обновления: {res}")
+            else:
+                QMessageBox.information(self, "Обновление", f"У вас последняя версия ({__version__}).")
+
     def check_cpu_temp(self) -> None:
         """Показать плашку, если датчики CPU есть, а температуры нет и нет драйвера."""
         lhm = self.engine.lhm
@@ -883,7 +1028,7 @@ class MainWindow(QMainWindow):
         srv = getattr(app, "single_server", None)
         if srv is not None:
             srv.close()  # иначе новый экземпляр решит, что программа уже запущена
-        if winsys.relaunch_as_admin():
+        if winsys.relaunch_as_admin(["--wait-previous"]):
             self.quitting = True
             self.tray.hide()
             self.engine.stop(screen_off=False)

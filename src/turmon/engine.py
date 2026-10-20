@@ -41,7 +41,9 @@ class Engine:
 
         self.status = "Запуск…"
         self.connected = False
-        self.paused = False
+        self.paused = False          # «Выключить экран» в программе
+        self.monitor_off = False     # мониторы ПК погасли (простой/блокировка)
+        self._applied_brightness: int | None = None
         self.last_frame: Image.Image | None = None
         self.last_send_ms = 0.0
 
@@ -69,7 +71,7 @@ class Engine:
             except Exception as e:  # noqa: BLE001
                 log.warning("LibreHardwareMonitor: %s", e)
         self.hub.add(VolumeProvider())
-        self.weather = WeatherProvider(s.lat, s.lon, s.city)
+        self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto)
         self.hub.add(self.weather)
         self._thread = threading.Thread(target=self._run, name="engine", daemon=True)
         self._thread.start()
@@ -170,14 +172,71 @@ class Engine:
         """Временно показать тему из редактора (None — вернуть выбранную)."""
         self.set_theme(theme if theme is not None else self.settings.theme)
 
+    @property
+    def blank(self) -> bool:
+        return self.paused or self.monitor_off
+
+    def is_night(self, now: time.struct_time | None = None) -> bool:
+        s = self.settings
+        if not s.night_enabled:
+            return False
+        now = now or time.localtime()
+        cur = now.tm_hour * 60 + now.tm_min
+
+        def mins(hm: str) -> int:
+            try:
+                h, m = hm.split(":")
+                return int(h) % 24 * 60 + int(m) % 60
+            except ValueError:
+                return 0
+        a, b = mins(s.night_from), mins(s.night_to)
+        return (a <= cur < b) if a <= b else (cur >= a or cur < b)
+
+    def effective_brightness(self) -> int:
+        s = self.settings
+        return int(s.night_brightness if self.is_night() else s.brightness)
+
+    def _apply_brightness(self, force: bool = False) -> None:
+        """Под замком: выставить яркость, если она изменилась (в т.ч. по ночному режиму)."""
+        b = self.effective_brightness()
+        if self.display.is_open and (force or b != self._applied_brightness):
+            try:
+                self.display.set_brightness(b)
+                self._applied_brightness = b
+            except DisplayError as e:
+                self._lost(e)
+
     def set_brightness(self, percent: int) -> None:
         self.settings.brightness = percent
         with self._lock:
+            self._apply_brightness()
+
+    def refresh_brightness(self) -> None:
+        with self._lock:
+            self._apply_brightness()
+
+    def set_monitor_off(self, off: bool) -> None:
+        if off == self.monitor_off or not self.settings.follow_monitor:
+            if not off:
+                self.monitor_off = False
+            return
+        log.info("Мониторы %s — мини-экран %s", "погасли" if off else "включились",
+                 "гаснет" if off else "включается")
+        self.monitor_off = off
+        self._apply_blank()
+
+    def _apply_blank(self) -> None:
+        with self._lock:
             if self.display.is_open:
                 try:
-                    self.display.set_brightness(percent)
+                    if self.blank:
+                        self.display.screen_off()
+                    else:
+                        self.display.screen_on()
+                        self.sender.invalidate()
                 except DisplayError as e:
                     self._lost(e)
+        self._wake.set()
 
     def set_flip(self, flip: bool) -> None:
         self.settings.flip = flip
@@ -187,15 +246,7 @@ class Engine:
 
     def set_paused(self, paused: bool) -> None:
         self.paused = paused
-        with self._lock:
-            if self.display.is_open:
-                try:
-                    (self.display.screen_off if paused else self.display.screen_on)()
-                    if not paused:
-                        self.sender.invalidate()
-                except DisplayError as e:
-                    self._lost(e)
-        self._wake.set()
+        self._apply_blank()
 
     def reconnect(self, port: str | None = None) -> None:
         with self._lock:
@@ -213,6 +264,7 @@ class Engine:
         if self.weather:
             s = self.settings
             self.weather.lat, self.weather.lon, self.weather.city = s.lat, s.lon, s.city
+            self.weather.auto = s.weather_auto
             self.weather.refresh_now()
 
     def update_system_options(self) -> None:
@@ -256,13 +308,13 @@ class Engine:
                 self.display.open()
             d = self.display
             d.screen_on()
-            d.set_brightness(self.settings.brightness)
+            self._apply_brightness(force=True)
             d.set_orientation(Orientation.from_layout(self.theme.landscape, self.settings.flip))
             self.sender.invalidate()
             self._need_setup = False
             self.connected = True
             self._set_status(f"Подключено: {getattr(d, 'port', '') or 'экран'}")
-            if self.paused:
+            if self.blank:
                 d.screen_off()
         except DisplayError as e:
             self.connected = False
@@ -291,7 +343,9 @@ class Engine:
 
             with self._lock:
                 self._ensure_connected()
-                if self.display.is_open and not self._need_setup and not self.paused:
+                if self.connected and not self.blank:
+                    self._apply_brightness()  # ночной режим включается/выключается сам
+                if self.display.is_open and not self._need_setup and not self.blank:
                     try:
                         if frame.size != (self.display.width, self.display.height):
                             self._need_setup = True

@@ -60,6 +60,11 @@ def set_autostart(enabled: bool, as_admin: bool) -> str:
     return "registry"
 
 
+def run_task() -> bool:
+    """Запустить задачу автозапуска (она работает с наивысшими правами)."""
+    return _schtasks(["/Run", "/TN", TASK_NAME])
+
+
 def autostart_state() -> str:
     if os.name != "nt":
         return ""
