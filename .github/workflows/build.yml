@@ -73,6 +73,29 @@ jobs:
           pyinstaller --noconfirm --distpath dist-dir --workpath build/pyi-dir packaging/turmon.spec
           Compress-Archive -Path dist-dir/TuringMonitorRU -DestinationPath dist/TuringMonitorRU-portable.zip
 
+      - name: Установщик (Inno Setup)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path src/turmon/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Qp "/DAppVersion=$ver" packaging/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC: $LASTEXITCODE" }
+          Get-ChildItem dist | ForEach-Object { Write-Output "::notice title=dist::$($_.Name) $($_.Length)" }
+
+      - name: Проверка установщика
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/TuringMonitorRU-Setup-*.exe | Select-Object -First 1
+          $dir = "C:\TMtest\Мой монитор"
+          $p = Start-Process $setup.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$dir`" /TASKS=desktopicon" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "установка: $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\TuringMonitorRU.exe")) { throw "нет exe в выбранной папке" }
+          $u = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES" -Wait -PassThru
+          Start-Sleep -Seconds 3
+          if (Test-Path "$dir\TuringMonitorRU.exe") { throw "удаление не убрало файлы" }
+          Write-Output "::notice title=installer::установка в '$dir' и удаление прошли"
+
       - name: Проверка запуска exe
         shell: pwsh
         run: |
@@ -87,6 +110,7 @@ jobs:
         with:
           name: TuringMonitorRU
           path: |
+            dist/TuringMonitorRU-Setup-*.exe
             dist/TuringMonitorRU.exe
             dist/TuringMonitorRU-portable.zip
 
@@ -95,5 +119,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/TuringMonitorRU-Setup-*.exe
             dist/TuringMonitorRU.exe
             dist/TuringMonitorRU-portable.zip

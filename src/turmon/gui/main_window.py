@@ -437,6 +437,8 @@ class SettingsPage(QScrollArea):
         g = QGroupBox("Программа")
         v = QVBoxLayout(g)
         self.autostart = QCheckBox("Запускать вместе с Windows")
+        if os.name == "nt":  # автозапуск мог включить установщик
+            self.s.autostart = bool(winsys.autostart_state())
         self.autostart.setChecked(self.s.autostart)
         self.autostart.toggled.connect(self._autostart)
         v.addWidget(self.autostart)
