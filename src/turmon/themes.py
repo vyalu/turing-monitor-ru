@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .paths import BUILTIN_THEMES, user_themes
 from .theme.model import Theme
-from .importers.turzx import slug
+from .importers.turzx import slug  # noqa: F401 (используется и снаружи)
 
 
 @dataclass
@@ -98,3 +98,64 @@ def delete(theme_id: str) -> None:
     folder = folder_of(theme_id)
     if folder is not None:
         shutil.rmtree(folder)
+
+
+# ---------------------------------------------------------------- обмен темами одним файлом
+PACK_EXT = ".tmtheme"
+PACK_MAX = 50 * 2**20  # защита от «zip-бомб»
+
+
+def export_pack(theme_id: str, dest: Path) -> Path:
+    """Сохранить тему с картинками в один файл .tmtheme (это обычный zip)."""
+    import zipfile
+
+    folder = folder_of(theme_id)
+    if folder is None:
+        raise ValueError("тема не найдена")
+    t = Theme.load(folder)
+    dest = Path(dest)
+    if dest.suffix.lower() != PACK_EXT:
+        dest = dest.with_suffix(PACK_EXT)
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(folder / "theme.json", "theme.json")
+        for rel in sorted(set(t.asset_refs())):
+            p = Path(rel)
+            if p.is_absolute() or ".." in p.parts:
+                continue
+            src = folder / p
+            if src.is_file():
+                z.write(src, p.as_posix())
+    return dest
+
+
+def import_pack(src: Path) -> str:
+    """Распаковать .tmtheme в «Мои темы», вернуть id новой темы."""
+    import zipfile
+
+    with zipfile.ZipFile(src) as z:
+        names = z.namelist()
+        if "theme.json" not in names:
+            raise ValueError("в файле нет theme.json — это не тема")
+        if sum(i.file_size for i in z.infolist()) > PACK_MAX:
+            raise ValueError("файл темы слишком большой")
+        data = json.loads(z.read("theme.json").decode("utf-8"))
+        if not isinstance(data, dict) or not isinstance(data.get("widgets"), list):
+            raise ValueError("повреждённый theme.json")
+        name = str(data.get("name") or Path(src).stem)
+        folder = unique_user_folder(name)
+        folder.mkdir(parents=True)
+        root = folder.resolve()
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            target = (folder / info.filename).resolve()
+            # не даём файлам вылезти за папку темы ("../../" и абсолютные пути)
+            if root not in target.parents and target != root / "theme.json":
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(z.read(info))
+    t = Theme.load(folder)
+    if "TURZX" in (t.author or ""):
+        t.author = "импорт из файла"
+        t.save(folder)
+    return id_of(folder)

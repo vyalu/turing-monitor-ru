@@ -208,3 +208,28 @@ def test_show_hide_if():
     assert set(r.bboxes) == {"a"}
     r.render({"fps.value": 144})
     assert set(r.bboxes) == {"b"}
+
+
+def test_theme_pack_roundtrip(tmp_path, monkeypatch):
+    import zipfile
+
+    from turmon import paths, themes as tl
+
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(tl, "user_themes", lambda: (tmp_path / "themes").mkdir(exist_ok=True) or tmp_path / "themes")
+    src = tl.load("builtin:glass")
+    tid = tl.save_as(src, "Моя тема")
+    pack = tl.export_pack(tid, tmp_path / "out")
+    assert pack.suffix == ".tmtheme"
+    with zipfile.ZipFile(pack) as z:
+        assert "theme.json" in z.namelist() and "assets/bg.png" in z.namelist()
+    new_id = tl.import_pack(pack)
+    t = tl.load(new_id)
+    assert t.name == "Моя тема" and t.asset(t.background_image) is not None
+    # вредный архив: файлы за пределами папки темы не распаковываются
+    evil = tmp_path / "evil.tmtheme"
+    with zipfile.ZipFile(evil, "w") as z:
+        z.writestr("theme.json", '{"name": "x", "widgets": []}')
+        z.writestr("../../escape.txt", "boom")
+    tl.import_pack(evil)
+    assert not (tmp_path / "escape.txt").exists() and not (tmp_path.parent / "escape.txt").exists()

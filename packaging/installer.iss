@@ -13,6 +13,7 @@
 #define TaskName "TuringMonitorRU"
 
 [Setup]
+ChangesAssociations=yes
 AppId={{6F3D2C1E-8A4B-4E8C-9B1A-7C2D5E9F0A31}
 AppName={#AppName}
 AppVersion={#AppVersion}
@@ -49,6 +50,13 @@ Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Ярлыки:"
 Name: "pawnio"; Description: "Установить драйвер PawnIO (нужен для температуры и частот процессора)"; GroupDescription: "Датчики:"; Check: IsAdminInstallMode and not PawnIOInstalled
 Name: "autostart"; Description: "Запускать вместе с Windows (с правами администратора — работают все датчики)"; GroupDescription: "Запуск:"; Check: IsAdminInstallMode
+
+[Registry]
+; двойной щелчок по файлу темы .tmtheme открывает его в программе
+Root: HKA; Subkey: "Software\Classes\.tmtheme"; ValueType: string; ValueName: ""; ValueData: "TuringMonitorRU.Theme"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\TuringMonitorRU.Theme"; ValueType: string; ValueName: ""; ValueData: "Тема Turing Monitor RU"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\TuringMonitorRU.Theme\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\TuringMonitorRU.Theme\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

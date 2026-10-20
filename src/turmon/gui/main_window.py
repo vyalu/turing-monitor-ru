@@ -150,6 +150,10 @@ class HomePage(QWidget):
         b_imp.setToolTip("Перенести темы из старой программы (файлы *.data из папки config)")
         b_imp.clicked.connect(self.import_turzx)
         top.addWidget(b_imp)
+        b_open = QPushButton("Открыть тему…")
+        b_open.setToolTip("Добавить тему из файла .tmtheme (например, присланную другом)")
+        b_open.clicked.connect(self.import_pack)
+        top.addWidget(b_open)
         b_folder = QPushButton("Папка тем")
         b_folder.clicked.connect(lambda: winsys.open_path(user_themes()))
         top.addWidget(b_folder)
@@ -189,6 +193,10 @@ class HomePage(QWidget):
         self.b_del.clicked.connect(self._delete)
         btns.addWidget(b_edit)
         btns.addWidget(b_dup)
+        b_exp = QPushButton("Экспорт в файл…")
+        b_exp.setToolTip("Сохранить тему вместе с картинками в один файл .tmtheme, чтобы поделиться")
+        b_exp.clicked.connect(self.export_pack)
+        btns.addWidget(b_exp)
         btns.addStretch(1)
         btns.addWidget(self.b_del)
         rl.addLayout(btns)
@@ -318,6 +326,7 @@ class HomePage(QWidget):
         m.addAction("Показать на экране", lambda: self._choose(it))
         m.addAction("Редактировать", self._edit_current)
         m.addAction("Сделать копию", self._duplicate)
+        m.addAction("Экспорт в файл…", self.export_pack)
         if str(it.data(Qt.UserRole)).startswith("user:"):
             m.addSeparator()
             m.addAction("Удалить", self._delete)
@@ -353,6 +362,44 @@ class HomePage(QWidget):
                     + ", ".join(sorted(set(rep.skipped))[:8]))
         msg += "\n\nПодписи и фон перенесены картинкой, значения — редактируемыми элементами."
         QMessageBox.information(self, "Импорт из TURZX", msg)
+
+    def export_pack(self) -> None:
+        tid = self._current_id()
+        t = theme_lib.load(tid)
+        start = str(Path.home() / "Desktop" / (theme_lib.slug(t.name) + theme_lib.PACK_EXT))
+        path, _ = QFileDialog.getSaveFileName(self, "Экспорт темы", start, "Тема Turing Monitor (*.tmtheme)")
+        if not path:
+            return
+        try:
+            out = theme_lib.export_pack(tid, Path(path))
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self, "Экспорт темы", f"Не удалось сохранить: {e}")
+            return
+        QMessageBox.information(self, "Экспорт темы", f"Тема «{t.name}» сохранена:\n{out}\n\n"
+                                "Этот файл можно отправить другу — он откроет его кнопкой «Открыть тему…».")
+
+    def import_pack(self, path: str | None = None) -> None:
+        if not path:
+            files, _ = QFileDialog.getOpenFileNames(self, "Открыть тему", "", "Тема Turing Monitor (*.tmtheme)")
+        else:
+            files = [path]
+        if not files:
+            return
+        last, bad = None, []
+        for f in files:
+            try:
+                last = theme_lib.import_pack(Path(f))
+            except Exception as e:  # noqa: BLE001
+                bad.append(f"{Path(f).name}: {e}")
+        self.reload_gallery()
+        if last:
+            self.show_section("user")
+            self.engine.set_theme(last)
+            self.engine.settings.save()
+            self._fill_gallery()
+            self.sync_scale()
+        if bad:
+            QMessageBox.warning(self, "Открыть тему", "Не удалось открыть:\n" + "\n".join(bad))
 
     # ---- управление экраном ----
     def _apply_brightness(self) -> None:

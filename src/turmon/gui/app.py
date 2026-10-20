@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import logging
 import logging.handlers
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -71,11 +72,11 @@ class _Mutex:
 INSTANCE = _Mutex()
 
 
-def _already_running() -> bool:
+def _already_running(message: bytes = b"show") -> bool:
     sock = QLocalSocket()
     sock.connectToServer(SERVER_NAME)
     if sock.waitForConnected(300):
-        sock.write(b"show")
+        sock.write(message)
         sock.flush()
         sock.waitForBytesWritten(300)
         sock.disconnectFromServer()
@@ -111,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--minimized", action="store_true", help="запуск свёрнутым в трей")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--wait-previous", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("file", nargs="?", help="файл темы .tmtheme для открытия")
     args, qt_args = ap.parse_known_args(argv if argv is not None else sys.argv[1:])
 
     setup_logging(args.debug)
@@ -120,10 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(app_icon())
     app.setQuitOnLastWindowClosed(False)
 
+    open_msg = ("open:" + os.path.abspath(args.file)).encode("utf-8") if args.file else b"show"
+    if args.file and _already_running(open_msg):
+        return 0
     if _start_elevated_via_task(args):
+        if args.file:
+            _already_running(open_msg)
         return 0
     if not INSTANCE.acquire(wait=20 if args.wait_previous else 0):
-        if not _already_running():  # окно не показалось — копия запущена с другими правами
+        if not _already_running(open_msg):  # окно не показалось — копия запущена с другими правами
             apply_style(app)
             QMessageBox.information(
                 None, APP_TITLE,
@@ -159,10 +166,19 @@ def main(argv: list[str] | None = None) -> int:
 
     def on_conn() -> None:
         c = server.nextPendingConnection()
-        if c is not None:
-            c.readyRead.connect(win.show_normal)
+        if c is None:
+            return
+
+        def got() -> None:
+            data = bytes(c.readAll()).decode("utf-8", "replace")
             win.show_normal()
+            if data.startswith("open:"):
+                win.nav.setCurrentRow(0)
+                win.home.import_pack(data[5:])
+        c.readyRead.connect(got)
     server.newConnection.connect(on_conn)
+    if args.file:
+        QTimer.singleShot(800, lambda: (win.show_normal(), win.home.import_pack(os.path.abspath(args.file))))
 
     if not (args.minimized and settings.start_minimized):
         win.show()
