@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QComboBox, QFileDialog, QFormLayout, QFrame,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
                                QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QSpinBox, QStackedWidget, QSystemTrayIcon,
@@ -86,6 +86,31 @@ class HomePage(QWidget):
         row.addWidget(self.bright, 1)
         row.addWidget(self.bright_lbl)
         ll.addLayout(row)
+
+        row_s = QHBoxLayout()
+        row_s.addWidget(QLabel("Размер текста"))
+        self.scale = QSlider(Qt.Horizontal)
+        self.scale.setRange(70, 170)
+        self.scale.setSingleStep(5)
+        self.scale.setPageStep(10)
+        self.scale.setToolTip("Крупнее или мельче текст и значки в текущей теме. "
+                              "Запоминается отдельно для каждой темы.")
+        self.scale_lbl = QLabel()
+        self.scale_lbl.setFixedWidth(40)
+        self._scale_timer = QTimer(self)
+        self._scale_timer.setSingleShot(True)
+        self._scale_timer.timeout.connect(self._apply_scale)
+        self.scale.valueChanged.connect(lambda v: (self.scale_lbl.setText(f"{v}%"),
+                                                   self._scale_timer.start(150)))
+        row_s.addWidget(self.scale, 1)
+        row_s.addWidget(self.scale_lbl)
+        b_reset = QToolButton()
+        b_reset.setText("↺")
+        b_reset.setToolTip("Вернуть 100%")
+        b_reset.clicked.connect(lambda: self.scale.setValue(100))
+        row_s.addWidget(b_reset)
+        ll.addLayout(row_s)
+        self.sync_scale()
 
         self.flip = QCheckBox("Перевернуть изображение на 180°")
         self.flip.setToolTip("Если экран стоит вверх ногами")
@@ -178,7 +203,19 @@ class HomePage(QWidget):
         tid = it.data(Qt.UserRole)
         self.engine.set_theme(tid)
         self.engine.settings.save()
+        self.sync_scale()
         self.win.tray_update()
+
+    def sync_scale(self) -> None:
+        v = int(round(self.engine.scale_for(self.engine.theme) * 100))
+        self.scale.blockSignals(True)
+        self.scale.setValue(v)
+        self.scale.blockSignals(False)
+        self.scale_lbl.setText(f"{v}%")
+
+    def _apply_scale(self) -> None:
+        self.engine.set_text_scale(self.scale.value() / 100)
+        self.engine.settings.save()
 
     def _edit_current(self) -> None:
         self.edit_requested.emit(self._current_id())
@@ -671,6 +708,7 @@ class MainWindow(QMainWindow):
     def _tray_theme(self, tid: str) -> None:
         self.engine.set_theme(tid)
         self.engine.settings.save()
+        self.home.sync_scale()
         self.home.reload_gallery()
 
     def show_normal(self) -> None:

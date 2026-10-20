@@ -33,7 +33,7 @@ class Engine:
         self.hub = SensorHub()
         self.hub.custom = settings.custom_values()
         self.theme: Theme = theme_lib.load(settings.theme)
-        self.renderer = Renderer(self.theme)
+        self.renderer = Renderer(self.theme, self.scale_for(self.theme))
         self.display: Display = TuringRevA(settings.port, settings.chunk)
         self.sender = FrameSender(self.display)
         self.on_frame: FrameCallback | None = None
@@ -51,6 +51,7 @@ class Engine:
         self._thread: threading.Thread | None = None
         self._need_setup = True
         self._next_connect = 0.0
+        self._sleeping = False
         self.weather: WeatherProvider | None = None
         self.lhm: LhmProvider | None = None
         self.system: SystemProvider | None = None
@@ -87,6 +88,68 @@ class Engine:
             self.display.close()
         self.hub.stop()
 
+    def shutdown_now(self) -> None:
+        """Быстро погасить экран: выключение/перезагрузка Windows.
+
+        Система даёт программам всего несколько секунд, поэтому без ожидания
+        рабочего потока: перехватываем порт и сразу шлём «выключить».
+        """
+        self._stop.set()
+        self._wake.set()
+        got = self._lock.acquire(timeout=3)
+        try:
+            if self.display.is_open:
+                try:
+                    self.display.screen_off()
+                except DisplayError:
+                    pass
+            self.display.close()
+        finally:
+            if got:
+                self._lock.release()
+        log.info("Экран выключен: завершение работы Windows")
+
+    def suspend(self) -> None:
+        """Сон/гибернация: погасить экран, но не останавливать программу."""
+        with self._lock:
+            self._sleeping = True
+            if self.display.is_open:
+                try:
+                    self.display.screen_off()
+                except DisplayError:
+                    pass
+            self.display.close()
+            self.connected = False
+        log.info("Экран выключен: компьютер уходит в сон")
+
+    def resume(self) -> None:
+        with self._lock:
+            self._sleeping = False
+            self._need_setup = True
+            self._next_connect = time.monotonic() + 2  # USB после сна поднимается не сразу
+        self._wake.set()
+        log.info("Пробуждение: переподключение к экрану")
+
+    # ---- масштаб текста ----
+    def scale_for(self, theme: Theme) -> float:
+        if theme.folder is None:
+            return 1.0
+        try:
+            key = theme_lib.id_of(theme.folder)
+        except Exception:  # noqa: BLE001
+            return 1.0
+        return float(self.settings.text_scales.get(key, 1.0))
+
+    def set_text_scale(self, scale: float) -> None:
+        with self._lock:
+            key = theme_lib.id_of(self.theme.folder) if self.theme.folder else self.settings.theme
+            if abs(scale - 1.0) < 0.001:
+                self.settings.text_scales.pop(key, None)
+            else:
+                self.settings.text_scales[key] = round(scale, 2)
+            self.renderer.text_scale = scale
+        self._wake.set()
+
     # ---- команды из интерфейса ----
     def set_theme(self, theme_id: str | Theme) -> None:
         with self._lock:
@@ -97,7 +160,7 @@ class Engine:
                 self.settings.theme = theme_id
             orient_changed = theme.landscape != self.theme.landscape
             self.theme = theme
-            self.renderer = Renderer(theme)
+            self.renderer = Renderer(theme, self.scale_for(theme))
             self.sender.invalidate()
             if orient_changed:
                 self._need_setup = True
@@ -182,6 +245,8 @@ class Engine:
         self._set_status(f"Экран отключён: {e}")
 
     def _ensure_connected(self) -> None:
+        if self._sleeping or self._stop.is_set():
+            return
         if self.display.is_open and not self._need_setup:
             return
         if time.monotonic() < self._next_connect:

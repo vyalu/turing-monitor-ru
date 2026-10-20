@@ -338,7 +338,62 @@ def terminal():
     save_theme("terminal", "Терминал", True, ws, "#060C08", bg)
 
 
+# ---------- 7. Крупно (портрет): 4 больших показателя ----------
+def big_portrait():
+    bg = gradient((320, 480), (14, 16, 22), (8, 9, 12))
+    rows = [("CPU", "cpu.temp", "cpu.load", "#4FC3F7", 85),
+            ("GPU", "gpu.temp", "gpu.load", "#FF6E9C", 83)]
+    ws = []
+    for i, (lab, t, l, c, al) in enumerate(rows):
+        y = 8 + i * 168
+        ws += [
+            RECT(8, y, 304, 160, "#FFFFFF0D", 18),
+            T(24, y + 10, lab, 22, c, "Roboto-Black"),
+            T(296, y + 12, "{" + l + ":.0f}%", 26, "#FFFFFF", "Roboto-Bold", "right"),
+            T(24, y + 40, "{" + t + ":.0f}°", 84, "#FFFFFF", "Roboto-Black", alert_above=al),
+            BAR(24, y + 140, 272, 10, l, c, radius=5, alert_above=95),
+        ]
+    ws += [
+        RECT(8, 344, 148, 128, "#FFFFFF0D", 18),
+        T(82, 354, "ОЗУ", 18, "#69F0AE", "Roboto-Black", "center"),
+        T(82, 384, "{ram.load:.0f}%", 44, "#FFFFFF", "Roboto-Black", "center"),
+        T(82, 440, "{ram.used:.1f} ГБ", 16, "#B0BEC5", "Roboto-Medium", "center"),
+        RECT(164, 344, 148, 128, "#FFFFFF0D", 18),
+        T(238, 360, "{time.hm}", 40, "#FFFFFF", "Roboto-Black", "center"),
+        T(238, 412, "{date.long}", 17, "#B0BEC5", "Roboto-Medium", "center"),
+        T(238, 440, "{weather.temp:.0f}°", 18, "#FFFFFF", "Roboto-Bold", "center"),
+    ]
+    save_theme("big_portrait", "Крупно (книжная)", False, ws, "#0E1016", bg)
+
+
+# ---------- 8. Крупно (альбом) ----------
+def big_landscape():
+    bg = gradient((480, 320), (14, 16, 22), (8, 9, 12))
+    ws = []
+    for i, (lab, t, l, c, al) in enumerate([("CPU", "cpu.temp", "cpu.load", "#4FC3F7", 85),
+                                             ("GPU", "gpu.temp", "gpu.load", "#FF6E9C", 83)]):
+        x = 8 + i * 236
+        ws += [
+            RECT(x, 8, 228, 204, "#FFFFFF0D", 18),
+            T(x + 16, 18, lab, 22, c, "Roboto-Black"),
+            T(x + 212, 20, "{" + l + ":.0f}%", 24, "#FFFFFF", "Roboto-Bold", "right"),
+            T(x + 114, 56, "{" + t + ":.0f}°", 96, "#FFFFFF", "Roboto-Black", "center", alert_above=al),
+            BAR(x + 16, 186, 196, 10, l, c, radius=5, alert_above=95),
+        ]
+    ws += [
+        RECT(8, 220, 228, 92, "#FFFFFF0D", 18),
+        T(24, 230, "ОЗУ", 18, "#69F0AE", "Roboto-Black"),
+        T(220, 228, "{ram.load:.0f}%", 40, "#FFFFFF", "Roboto-Black", "right"),
+        T(24, 280, "{ram.used:.1f} / {ram.total:.0f} ГБ", 16, "#B0BEC5", "Roboto-Medium"),
+        RECT(244, 220, 228, 92, "#FFFFFF0D", 18),
+        T(260, 226, "{time.hm}", 52, "#FFFFFF", "Roboto-Black"),
+        T(458, 236, "{weather.temp:.0f}°", 24, "#FFFFFF", "Roboto-Bold", "right"),
+        T(458, 274, "{date.weekday_short}", 18, "#B0BEC5", "Roboto-Medium", "right"),
+    ]
+    save_theme("big_landscape", "Крупно (альбомная)", True, ws, "#0E1016", bg)
+
+
 if __name__ == "__main__":
-    for fn in (neon, cards, minimal, rings, clock_weather, terminal):
+    for fn in (neon, cards, minimal, rings, clock_weather, terminal, big_portrait, big_landscape):
         fn()
         print("ok", fn.__name__)

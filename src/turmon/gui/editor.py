@@ -574,7 +574,7 @@ class EditorPage(QWidget):
     def _set_theme(self, t: Theme, theme_id: str) -> None:
         self.theme = t
         self.theme_id = theme_id
-        self.renderer = Renderer(t)
+        self.renderer = Renderer(t, self.engine.scale_for(t))
         self.undo.clear()
         self.redo.clear()
         self.dirty = False
@@ -901,7 +901,7 @@ class EditorPage(QWidget):
         folder, builtin = self.theme.folder, self.theme.builtin
         self.theme = Theme.from_dict(d, folder)
         self.theme.builtin = builtin
-        self.renderer = Renderer(self.theme)
+        self.renderer = Renderer(self.theme, self.engine.scale_for(self.theme))
         self._refresh_layers()
         self.select(sel if self._widget(sel) else "")
         self._changed()

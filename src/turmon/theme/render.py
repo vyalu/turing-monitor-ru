@@ -87,8 +87,11 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
 
 
 class Renderer:
-    def __init__(self, theme: Theme) -> None:
+    def __init__(self, theme: Theme, text_scale: float = 1.0) -> None:
         self.theme = theme
+        # «крупнее/мельче» для всей темы: увеличивает текст и значки погоды,
+        # точка привязки (левый/центр/правый край, верх строки) остаётся на месте
+        self.text_scale = text_scale
         self.bboxes: dict[str, BBox] = {}
         self._bg_key: tuple | None = None
         self._bg: Image.Image | None = None
@@ -152,7 +155,8 @@ class Renderer:
         text = render_template(str(w.get("text", "")), values)
         if not text:
             return None
-        size = int(num(w.get("size"), 20))
+        base_size = max(4, int(round(num(w.get("size"), 20))))
+        size = max(4, int(round(base_size * self.text_scale)))
         fname = str(w.get("font") or fonts.DEFAULT)
         font = fonts.get(fname, size * SS)
         color = parse_color(w.get("color"), (255, 255, 255, 255))
@@ -165,6 +169,10 @@ class Renderer:
         lines = text.split("\n")
         asc, desc = font.getmetrics()
         line_h = (asc + desc) * num(w.get("line_spacing"), 1.15)
+        if size != base_size:
+            # растём от середины строки, а не только вниз
+            a0, d0 = fonts.get(fname, base_size * SS).getmetrics()
+            y -= ((asc + desc) - (a0 + d0)) / 2
         d = ImageDraw.Draw(img, "RGBA")
         shadow = parse_color(w.get("shadow_color"), (0, 0, 0, 170)) if w.get("shadow") else None
         x0 = y0 = 1e9
@@ -421,7 +429,9 @@ class Renderer:
 
     def _w_weather_icon(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
-        s = num(w.get("size"), 64) * SS
+        s0 = num(w.get("size"), 64) * SS
+        s = s0 * self.text_scale
+        x, y = x - (s - s0) / 2, y - (s - s0) / 2  # от центра значка
         kind = str(values.get(w.get("source") or "weather.icon") or "")
         draw_weather_icon(img, (x, y, s), kind,
                           parse_color(w.get("color"), (255, 255, 255, 255)),

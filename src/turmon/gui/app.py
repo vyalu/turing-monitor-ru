@@ -69,6 +69,17 @@ def main(argv: list[str] | None = None) -> int:
 
     win = MainWindow(engine)
 
+    from . import power
+
+    def ended() -> None:
+        settings.save()
+        win.quitting = True
+        win.tray.hide()
+
+    app.power_filter = power.install(app, engine, win, ended)  # type: ignore[attr-defined]
+    app.aboutToQuit.connect(lambda: engine.shutdown_now()
+                            if settings.screen_off_on_exit and not engine._stop.is_set() else None)
+
     def on_conn() -> None:
         c = server.nextPendingConnection()
         if c is not None:

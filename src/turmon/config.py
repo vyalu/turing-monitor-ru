@@ -28,6 +28,7 @@ class Settings:
     disk: str = ""
     disk_index: int = 0
     sensor_overrides: dict[str, str] = field(default_factory=dict)
+    text_scales: dict[str, float] = field(default_factory=dict)   # тема -> масштаб текста
 
     user_text1: str = ""
     user_text2: str = ""
