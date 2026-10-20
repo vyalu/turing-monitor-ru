@@ -18,7 +18,9 @@
       "color": "",
       "border": "#FFB00055",
       "border_width": 2,
-      "radius": 6
+      "radius": 6,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -37,7 +39,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -56,7 +60,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -75,7 +81,9 @@
       "shadow": true,
       "shadow_color": "#FFB00033",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -94,7 +102,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -113,7 +123,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -135,7 +147,9 @@
       "segments": 12,
       "gap": 3,
       "alert_above": 90,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -154,7 +168,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -173,7 +189,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -195,7 +213,9 @@
       "segments": 12,
       "gap": 3,
       "alert_above": 95,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -214,7 +234,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -233,7 +255,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -255,7 +279,9 @@
       "segments": 12,
       "gap": 3,
       "alert_above": 90,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -274,7 +300,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text10",
+      "name": "FPS: text10",
+      "visible": true,
+      "x": 24,
+      "y": 278,
+      "text": "FPS {fps.value:3.0f}  1% {fps.low1:3.0f}  {fps.frametime:4.1f}мс",
+      "font": "DejaVuSansMono-Bold",
+      "size": 14,
+      "color": "#7A4E00",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -293,7 +342,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     }
   ]
 }

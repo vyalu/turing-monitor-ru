@@ -176,3 +176,35 @@ def test_design_themes_fit_screen():
         W, H = t.size
         for wid, bb in r.bboxes.items():
             assert bb[0] >= -2 and bb[1] >= -2 and bb[2] <= W + 2 and bb[3] <= H + 2, (tj.parent.name, wid, bb)
+
+
+def test_fps_from_presentmon_csv():
+    import io
+
+    from turmon.sensors.fps import FrameStats, parse_csv_stream
+
+    st = FrameStats()
+    head = "Application,ProcessID,SwapChainAddress,PresentRuntime,MsBetweenPresents,MsInPresentAPI\n"
+    rows = "".join(f"cs2.exe,4242,0x1,DXGI,{6.94 if i % 50 else 25.0},0.1\n" for i in range(300))
+    rows += "".join("dwm.exe,10,0x2,Other,16.6,0.1\n" for _ in range(50))
+    parse_csv_stream(io.StringIO(head + rows), st)
+    v = st.stats(4242)
+    assert v["fps.app"] == "cs2"
+    assert 120 < v["fps.value"] < 150          # ~144 FPS
+    assert v["fps.low1"] < 60                  # редкие подвисания 25 мс видны в 1% low
+    assert st.stats(10) == {}                  # служебные процессы не считаются
+    import time as _t
+    assert st.stats(4242, now=_t.monotonic() + 5) == {}  # игра закрыта — FPS пропадает
+
+
+def test_show_hide_if():
+    t = Theme(widgets=[
+        {"type": "text", "id": "a", "x": 0, "y": 0, "text": "ДИСК", "hide_if": "fps.value"},
+        {"type": "text", "id": "b", "x": 0, "y": 0, "text": "{fps.value:.0f}", "show_if": "fps.value"},
+    ])
+    t = Theme.from_dict(t.to_dict())
+    r = Renderer(t)
+    r.render({})
+    assert set(r.bboxes) == {"a"}
+    r.render({"fps.value": 144})
+    assert set(r.bboxes) == {"b"}

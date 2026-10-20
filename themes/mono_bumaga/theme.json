@@ -324,7 +324,29 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text12",
+      "name": "FPS: text12",
+      "visible": true,
+      "x": 320,
+      "y": 238,
+      "text": "FPS",
+      "font": "DejaVuSansMono",
+      "size": 11,
+      "color": "#6B665D",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "hide_if": "",
+      "show_if": "fps.value"
     },
     {
       "type": "text",
@@ -343,7 +365,29 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text13",
+      "name": "FPS: text13",
+      "visible": true,
+      "x": 464,
+      "y": 252,
+      "text": "{fps.value:.0f}",
+      "font": "DejaVuSansMono-Bold",
+      "size": 20,
+      "color": "#121212",
+      "align": "right",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "hide_if": "",
+      "show_if": "fps.value"
     },
     {
       "type": "graph",
@@ -362,7 +406,30 @@
       "fill": "#12121233",
       "line": 2.0,
       "bg": "",
-      "style": "bars"
+      "style": "bars",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "graph",
+      "id": "fps_graph1",
+      "name": "FPS: graph1",
+      "visible": true,
+      "x": 320,
+      "y": 278,
+      "w": 144,
+      "h": 22,
+      "source": "fps.value",
+      "min": 0.0,
+      "max": null,
+      "points": 48,
+      "color": "#121212",
+      "fill": "#12121233",
+      "line": 2.0,
+      "bg": "",
+      "style": "bars",
+      "hide_if": "",
+      "alert_above": null,
+      "show_if": "fps.value"
     }
   ]
 }

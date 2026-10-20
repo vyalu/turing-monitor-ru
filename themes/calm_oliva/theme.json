@@ -265,7 +265,29 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text11",
+      "name": "FPS: text11",
+      "visible": true,
+      "x": 364,
+      "y": 252,
+      "text": "FPS",
+      "font": "Roboto-Medium",
+      "size": 10,
+      "color": "#959784",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "hide_if": "",
+      "show_if": "fps.value"
     },
     {
       "type": "text",
@@ -284,7 +306,29 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text12",
+      "name": "FPS: text12",
+      "visible": true,
+      "x": 364,
+      "y": 270,
+      "text": "{fps.value:.0f}",
+      "font": "Roboto-Medium",
+      "size": 17,
+      "color": "#ECEBDF",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "hide_if": "",
+      "show_if": "fps.value"
     }
   ]
 }

@@ -23,7 +23,9 @@
       "shadow": true,
       "shadow_color": "#00000055",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -42,7 +44,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "weather_icon",
@@ -54,7 +58,9 @@
       "size": 46,
       "source": "weather.icon",
       "color": "#FFFFFF",
-      "accent": "#FFF3B0"
+      "accent": "#FFF3B0",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -73,7 +79,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -87,7 +95,9 @@
       "color": "#00000038",
       "border": "",
       "border_width": 1,
-      "radius": 20
+      "radius": 20,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -106,7 +116,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -128,7 +140,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 92,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -147,7 +161,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -166,7 +182,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -185,7 +203,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -207,7 +227,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 92,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -226,7 +248,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -245,7 +269,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -264,7 +290,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text10",
+      "name": "FPS: text10",
+      "visible": true,
+      "x": 32,
+      "y": 416,
+      "text": "FPS",
+      "font": "Roboto-Bold",
+      "size": 15,
+      "color": "#FFC4B0",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -286,7 +335,33 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 92,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "bar",
+      "id": "fps_bar3",
+      "name": "FPS: bar3",
+      "visible": true,
+      "x": 82,
+      "y": 424,
+      "w": 132,
+      "h": 8,
+      "source": "fps.value",
+      "min": 0.0,
+      "max": 144.0,
+      "color": "#FFB199",
+      "color2": "#FF6E7F",
+      "bg": "#FFFFFF22",
+      "radius": 4,
+      "direction": "right",
+      "segments": 0,
+      "gap": 2,
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -305,7 +380,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text11",
+      "name": "FPS: text11",
+      "visible": true,
+      "x": 288,
+      "y": 414,
+      "text": "{fps.value:.0f}",
+      "font": "Roboto-Bold",
+      "size": 18,
+      "color": "#FFFFFF",
+      "align": "right",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -324,7 +422,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text12",
+      "name": "FPS: text12",
+      "visible": true,
+      "x": 288,
+      "y": 436,
+      "text": "1% {fps.low1:.0f}",
+      "font": "Roboto-Medium",
+      "size": 11,
+      "color": "#FFC4B0",
+      "align": "right",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     }
   ]
 }

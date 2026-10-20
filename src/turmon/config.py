@@ -25,6 +25,7 @@ class Settings:
     night_brightness: int = 15
     follow_monitor: bool = True          # гасить мини-экран, когда гаснут мониторы
     check_updates: bool = True
+    fps_enabled: bool = True             # FPS в играх через PresentMon
 
     city: str = ""
     lat: float | None = None

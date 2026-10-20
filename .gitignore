@@ -7,3 +7,4 @@ dist-dir/
 *.egg-info/
 .pytest_cache/
 .venv/
+/presentmon/

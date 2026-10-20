@@ -57,6 +57,7 @@ class Engine:
         self.weather: WeatherProvider | None = None
         self.lhm: LhmProvider | None = None
         self.system: SystemProvider | None = None
+        self.fps = None
 
     # ---- жизненный цикл ----
     def start(self) -> None:
@@ -71,12 +72,17 @@ class Engine:
             except Exception as e:  # noqa: BLE001
                 log.warning("LibreHardwareMonitor: %s", e)
         self.hub.add(VolumeProvider())
+        if s.fps_enabled:
+            from .sensors.fps import FpsProvider
+
+            self.fps = FpsProvider()
+            self.hub.add(self.fps)
         self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto)
         self.hub.add(self.weather)
         self._thread = threading.Thread(target=self._run, name="engine", daemon=True)
         self._thread.start()
 
-    def stop(self, screen_off: bool = True) -> None:
+    def stop(self, screen_off: bool = True) -> None:  # noqa: D401
         self._stop.set()
         self._wake.set()
         if self._thread:
@@ -110,6 +116,10 @@ class Engine:
             if got:
                 self._lock.release()
         log.info("Экран выключен: завершение работы Windows")
+        try:
+            self.hub.stop()  # в том числе PresentMon
+        except Exception:  # noqa: BLE001
+            pass
 
     def suspend(self) -> None:
         """Сон/гибернация: погасить экран, но не останавливать программу."""

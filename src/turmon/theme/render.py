@@ -121,6 +121,12 @@ class Renderer:
         for w in self.theme.widgets:
             if not w.get("visible", True) or (skip and w.get("id") in skip):
                 continue
+            cond = w.get("show_if")
+            if cond and values.get(cond) in (None, ""):
+                continue
+            cond = w.get("hide_if")
+            if cond and values.get(cond) not in (None, ""):
+                continue
             fn = getattr(self, "_w_" + str(w.get("type")), None)
             if fn is None:
                 continue

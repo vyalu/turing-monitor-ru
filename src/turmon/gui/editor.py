@@ -186,9 +186,11 @@ class Canvas(QWidget):
 
 
 # ---------------------------------------------------------------- редакторы полей
-def source_combo(current: str, numeric_only: bool = False) -> QComboBox:
+def source_combo(current: str, numeric_only: bool = False, optional: bool = False) -> QComboBox:
     cb = QComboBox()
     cb.setMaxVisibleItems(24)
+    if optional:
+        cb.addItem("всегда", "")
     for g in groups():
         items = [s for s in SOURCES if s.group == g and (not numeric_only or not isinstance(s.sample, str))]
         if not items:
@@ -202,7 +204,7 @@ def source_combo(current: str, numeric_only: bool = False) -> QComboBox:
     if i < 0 and current:
         cb.addItem(current, current)
         i = cb.count() - 1
-    cb.setCurrentIndex(max(i, 1))
+    cb.setCurrentIndex(0 if optional and not current else max(i, 1))
     return cb
 
 
@@ -349,6 +351,12 @@ class PropertyPanel(QScrollArea):
                 w.addItem(label, key)
             w.setCurrentIndex(max(0, w.findData(value)))
             w.currentIndexChanged.connect(lambda _i, w=w: self._emit(n, w.currentData()))
+            return w
+        if f.kind == "source_opt":
+            w = source_combo(str(value or ""), optional=True)
+            w.setToolTip("Например, «FPS в игре»: «показывать» — элемент виден только в игре, "
+                         "«скрывать» — уступает место FPS на время игры")
+            w.currentIndexChanged.connect(lambda _i, w=w: self._emit(n, w.currentData() or ""))
             return w
         if f.kind == "source":
             w = source_combo(str(value or ""))

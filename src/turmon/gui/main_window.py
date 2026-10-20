@@ -497,6 +497,16 @@ class SettingsPage(QScrollArea):
         self.b_pawn2.clicked.connect(self.win.install_pawnio)
         dr.addWidget(self.b_pawn2)
         f.addRow("Драйвер CPU", dr)
+        fr = QHBoxLayout()
+        self.fps_cb = QCheckBox("Считать FPS в играх")
+        self.fps_cb.setToolTip("Через PresentMon (Intel): работает с любой видеокартой, в игру ничего "
+                               "не внедряется. FPS показывается для окна, которое сейчас в фокусе.")
+        self.fps_cb.setChecked(self.s.fps_enabled)
+        self.fps_cb.toggled.connect(self._fps_toggled)
+        fr.addWidget(self.fps_cb)
+        self.fps_lbl = label("", "muted")
+        fr.addWidget(self.fps_lbl, 1)
+        f.addRow("FPS", fr)
         self.net = QComboBox()
         self.net.addItem("Все подключения", "")
         for n in list_net_interfaces():
@@ -656,6 +666,7 @@ class SettingsPage(QScrollArea):
     def _update_weather_status(self) -> None:
         if self.isVisible():
             self.city_cur.setText(self._city_text())
+            self.refresh_fps()
 
     def _weather_auto(self, on: bool) -> None:
         self.s.weather_auto = on
@@ -756,8 +767,29 @@ class SettingsPage(QScrollArea):
             self.pawn_lbl.setText("PawnIO не установлен. Без него температура и частоты процессора не читаются.")
         self.b_pawn2.setVisible(not v)
 
+    def _fps_toggled(self, on: bool) -> None:
+        self.s.fps_enabled = on
+        self.s.save()
+        self.refresh_fps()
+
+    def refresh_fps(self) -> None:
+        p = self.engine.fps
+        vals = self.engine.hub.values
+        if not self.s.fps_enabled:
+            text = "выключено"
+        elif p is None:
+            text = "включится после перезапуска программы"
+        elif not p.available:
+            text = f"недоступно: {p.status}"
+        elif "fps.value" in vals:
+            text = f"сейчас: {vals.get('fps.app', '')} — {vals['fps.value']:.0f} FPS"
+        else:
+            text = p.status or "работает; FPS появится на экране, когда запустите игру"
+        self.fps_lbl.setText(text)
+
     def refresh_admin(self) -> None:
         self.refresh_pawnio()
+        self.refresh_fps()
         lhm = self.engine.lhm
         if os.name != "nt":
             text = "Расширенные датчики доступны только в Windows."

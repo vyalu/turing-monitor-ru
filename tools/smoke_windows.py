@@ -47,6 +47,27 @@ def main() -> int:
         annotate("notice", "weather", f"{wp.location_label}: {wv.get('weather.temp')}° {wv.get('weather.desc')}")
     except Exception as e:  # noqa: BLE001
         annotate("warning", "weather", f"погода не получена: {e}")
+    try:
+        import subprocess
+
+        from turmon.sensors.fps import presentmon_path
+
+        exe = presentmon_path()
+        if exe is None:
+            annotate("warning", "fps", "PresentMon не найден")
+        else:
+            r = subprocess.run([str(exe), "--output_stdout", "--no_console_stats", "--stop_existing_session",
+                                "--session_name", "TMsmoke", "--timed", "4", "--terminate_after_timed"],
+                               capture_output=True, text=True, timeout=40)
+            head = (r.stdout.splitlines() or [""])[0]
+            ok = "MsBetweenPresents" in head
+            annotate("notice" if ok else "error", "fps",
+                     f"код {r.returncode}, строк {len(r.stdout.splitlines())}, заголовок: {head[:300]}\n{r.stderr[:300]}")
+            if not ok:
+                return 1
+    except Exception as e:  # noqa: BLE001
+        annotate("error", "fps", f"PresentMon: {e}")
+        return 1
     return 0 if "cpu.load" in v else 1
 
 

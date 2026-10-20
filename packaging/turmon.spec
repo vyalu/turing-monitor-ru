@@ -14,6 +14,8 @@ datas = [
 ]
 if (ROOT / "lhm").is_dir():
     datas.append((str(ROOT / "lhm"), "lhm"))
+if (ROOT / "presentmon").is_dir():
+    datas.append((str(ROOT / "presentmon"), "presentmon"))
 
 binaries, hiddenimports = [], ["clr", "pycaw.pycaw", "comtypes.stream"]
 for pkg in ("clr_loader", "pythonnet"):

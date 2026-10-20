@@ -58,6 +58,20 @@ jobs:
           Write-Output "::notice title=pawnio::$((Get-Item lhm/PawnIO_setup.exe).Length) байт, подпись: $($sig.Status) $($sig.SignerCertificate.Subject)"
           if ($sig.Status -ne "Valid") { throw "подпись PawnIO_setup.exe недействительна" }
 
+      - name: PresentMon (FPS в играх)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $rel = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } https://api.github.com/repos/GameTechDev/PresentMon/releases/latest
+          $asset = $rel.assets | Where-Object { $_.name -match '^PresentMon-[\d.]+-x64\.exe$' } | Select-Object -First 1
+          if (-not $asset) { throw "не найден консольный PresentMon в $($rel.tag_name): $($rel.assets.name -join ', ')" }
+          New-Item -ItemType Directory -Force presentmon | Out-Null
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile presentmon/PresentMon.exe
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/GameTechDev/PresentMon/main/LICENSE.txt" -OutFile presentmon/LICENSE.txt
+          $sig = Get-AuthenticodeSignature presentmon/PresentMon.exe
+          Write-Output "::notice title=presentmon::$($asset.name) $($asset.size) байт, подпись: $($sig.Status) $($sig.SignerCertificate.Subject)"
+
       - name: Зависимости
         run: pip install -r requirements.txt pyinstaller pytest
 

@@ -137,6 +137,13 @@ WIDGETS: dict[str, dict[str, Any]] = {
 }
 
 
+# общее для всех элементов: показывать только когда показатель есть (например, FPS — только в игре)
+SHOW_IF = Field("show_if", "Показывать, только если есть", "source_opt", "")
+HIDE_IF = Field("hide_if", "Скрывать, если есть", "source_opt", "")
+for _spec in WIDGETS.values():
+    _spec["fields"] = tuple(_spec["fields"]) + (SHOW_IF, HIDE_IF)
+
+
 def defaults(wtype: str) -> dict[str, Any]:
     return {f.name: copy.deepcopy(f.default) for f in WIDGETS[wtype]["fields"]}
 
