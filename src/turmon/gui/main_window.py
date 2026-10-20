@@ -38,6 +38,14 @@ def card() -> tuple[QFrame, QVBoxLayout]:
     return f, lay
 
 
+def hint(text: str) -> QLabel:
+    """Пояснение к разделу настроек простыми словами."""
+    lb = QLabel(text)
+    lb.setObjectName("muted")
+    lb.setWordWrap(True)
+    return lb
+
+
 def label(text: str, obj: str = "") -> QLabel:
     lbl = QLabel(text)
     if obj:
@@ -500,7 +508,18 @@ class HomePage(QWidget):
 
 
 # ---------------------------------------------------------------- «Настройки»
-class SettingsPage(QScrollArea):
+SETTINGS_SECTIONS = (
+    ("main", "Основные", "Автозапуск, яркость, плавность"),
+    ("weather", "Погода", "Город и свой текст"),
+    ("music", "Музыка", "«Сейчас играет» и режим плеера"),
+    ("games", "Игры и перегрев", "FPS и предупреждения"),
+    ("sensors", "Датчики", "Права, драйвер, выбор"),
+    ("device", "Подключение", "COM-порт мини-экрана"),
+    ("about", "О программе", "Обновления и журнал"),
+)
+
+
+class SettingsPage(QWidget):
     cities_found = Signal(object)
 
     def __init__(self, win: "MainWindow") -> None:
@@ -508,17 +527,54 @@ class SettingsPage(QScrollArea):
         self.win = win
         self.engine: Engine = win.engine
         self.s: Settings = self.engine.settings
-        self.setWidgetResizable(True)
-        host = QWidget()
-        host.setMaximumWidth(960)
-        self.setWidget(host)
-        root = QVBoxLayout(host)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(12)
-        root.addWidget(label("Настройки", "h1"))
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 0)
+        outer.setSpacing(10)
+        outer.addWidget(label("Настройки", "h1"))
+        body = QHBoxLayout()
+        body.setSpacing(16)
+        outer.addLayout(body, 1)
+        # слева — разделы, справа — их содержимое: не нужно листать одну длинную простыню
+        self.subnav = QListWidget()
+        self.subnav.setObjectName("subnav")
+        self.subnav.setFixedWidth(220)
+        self.subnav.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        body.addWidget(self.subnav)
+        self.pages = QStackedWidget()
+        body.addWidget(self.pages, 1)
+        self._sec: dict[str, QVBoxLayout] = {}
+        for key, title, hint_ in SETTINGS_SECTIONS:
+            it = QListWidgetItem()
+            it.setSizeHint(QSize(200, 54))
+            it.setToolTip(hint_)
+            self.subnav.addItem(it)
+            cell = QWidget()
+            cell.setAttribute(Qt.WA_TransparentForMouseEvents)
+            cl = QVBoxLayout(cell)
+            cl.setContentsMargins(12, 6, 8, 6)
+            cl.setSpacing(1)
+            t_lbl = QLabel(title)
+            t_lbl.setStyleSheet("font-weight: 500;")
+            cl.addWidget(t_lbl)
+            cl.addWidget(label(hint_, "muted"))
+            self.subnav.setItemWidget(it, cell)
+            area = QScrollArea()
+            area.setWidgetResizable(True)
+            host = QWidget()
+            host.setMaximumWidth(860)
+            area.setWidget(host)
+            lay = QVBoxLayout(host)
+            lay.setContentsMargins(0, 0, 8, 16)
+            lay.setSpacing(12)
+            lay.addWidget(label(title, "h2"))
+            self._sec[key] = lay
+            self.pages.addWidget(area)
+        self.subnav.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.subnav.setCurrentRow(0)
+        sec = self._sec
 
         # --- подключение
-        g = QGroupBox("Подключение экрана")
+        g = QGroupBox("Мини-экран")
         f = QFormLayout(g)
         self.port = QComboBox()
         pr = QHBoxLayout()
@@ -532,7 +588,15 @@ class SettingsPage(QScrollArea):
         pr.addWidget(b_apply)
         f.addRow("COM-порт", pr)
         self.found = label("", "muted")
+        self.found.setWordWrap(True)
         f.addRow("", self.found)
+        self._f_device = f
+        sec["device"].addWidget(hint("Обычно экран находится сам. Выберите порт вручную, только если "
+                                     "программа его не видит. Перед этим закройте TURZX/UsbMonitor."))
+        sec["device"].addWidget(g)
+
+        g = QGroupBox("Плавность")
+        f = QFormLayout(g)
         sm = QHBoxLayout()
         self.smooth_cb = QCheckBox("Плавные переходы значений")
         self.smooth_cb.setToolTip("Полосы, дуги и цифры не прыгают, а плавно доезжают до нового значения")
@@ -547,7 +611,11 @@ class SettingsPage(QScrollArea):
         self.anim.setEnabled(self.s.smooth)
         sm.addWidget(self.anim)
         sm.addStretch(1)
-        f.addRow("Анимация", sm)
+        f.addRow(sm)
+        anim_group = g
+
+        g = QGroupBox("Для опытных")
+        f = QFormLayout(g)
         self.chunk = QSpinBox()
         self.chunk.setRange(0, 65536)
         self.chunk.setSingleStep(64)
@@ -555,11 +623,11 @@ class SettingsPage(QScrollArea):
         self.chunk.setToolTip("0 — автоматически. Если картинка на экране «сыпется», попробуйте 64 или 8192.")
         self.chunk.valueChanged.connect(lambda v: self._set("chunk", int(v)))
         f.addRow("Размер пакета (0 = авто)", self.chunk)
-        root.addWidget(g)
+        sec["device"].addWidget(g)
         self._fill_ports()
 
         # --- погода
-        g = QGroupBox("Погода")
+        g = QGroupBox("Город")
         f = QFormLayout(g)
         cr = QHBoxLayout()
         self.city = QLineEdit()
@@ -575,6 +643,7 @@ class SettingsPage(QScrollArea):
         self.city_results.activated.connect(self._pick_city)
         f.addRow("", self.city_results)
         self.city_cur = label(self._city_text(), "muted")
+        self.city_cur.setWordWrap(True)
         f.addRow("Сейчас", self.city_cur)
         self.w_auto = QCheckBox("Если город не выбран — определять место автоматически (по IP)")
         self.w_auto.setChecked(self.s.weather_auto)
@@ -594,7 +663,9 @@ class SettingsPage(QScrollArea):
         self._wtimer.timeout.connect(self._update_weather_status)
         self._wtimer.start(5000)
         self.cities_found.connect(self._show_cities)
-        root.addWidget(g)
+        sec["weather"].addWidget(hint("Погода берётся из Open-Meteo, а если он недоступен — из MET Norway "
+                                      "или wttr.in. Ключи и регистрация не нужны."))
+        sec["weather"].addWidget(g)
 
         # --- свой текст
         g = QGroupBox("Свой текст")
@@ -604,7 +675,9 @@ class SettingsPage(QScrollArea):
             le.setPlaceholderText("Показывается элементами «Свой текст»")
             le.textChanged.connect(lambda t, i=i: self._set_text(i, t))
             f.addRow(f"Текст {i}", le)
-        root.addWidget(g)
+        sec["weather"].addWidget(hint("Свой текст выводят элементы «Свой текст» в редакторе темы — "
+                                      "например, имя ПК или напоминание."))
+        sec["weather"].addWidget(g)
 
         # --- датчики
         g = QGroupBox("Датчики")
@@ -623,6 +696,9 @@ class SettingsPage(QScrollArea):
         self.b_pawn2.clicked.connect(self.win.install_pawnio)
         dr.addWidget(self.b_pawn2)
         f.addRow("Драйвер CPU", dr)
+        sensors_group = g
+        g = QGroupBox("FPS в играх")
+        gf = QFormLayout(g)
         fr = QHBoxLayout()
         self.fps_cb = QCheckBox("Считать FPS в играх")
         self.fps_cb.setToolTip("Через PresentMon (Intel): работает с любой видеокартой, в игру ничего "
@@ -632,7 +708,12 @@ class SettingsPage(QScrollArea):
         fr.addWidget(self.fps_cb)
         self.fps_lbl = label("", "muted")
         fr.addWidget(self.fps_lbl, 1)
-        f.addRow("FPS", fr)
+        gf.addRow(fr)
+        self.fps_lbl.setWordWrap(True)
+        sec["games"].addWidget(hint("FPS считает PresentMon (Intel) — как NVIDIA FrameView, с любой видеокартой. "
+                                    "В игру ничего не внедряется."))
+        sec["games"].addWidget(g)
+        g = sensors_group
         self.net = QComboBox()
         self.net.addItem("Все подключения", "")
         for n in list_net_interfaces():
@@ -660,7 +741,9 @@ class SettingsPage(QScrollArea):
         b_sens = QPushButton("Обновить список датчиков")
         b_sens.clicked.connect(self._fill_sensors)
         f.addRow("", b_sens)
-        root.addWidget(g)
+        sec["sensors"].addWidget(hint("Если какой-то показатель не тот (например, температура CPU), выберите "
+                                      "нужный датчик вручную."))
+        sec["sensors"].addWidget(g)
 
         # --- программа
         # --- экран: ночной режим и мониторы
@@ -695,10 +778,10 @@ class SettingsPage(QScrollArea):
         self.follow.setChecked(self.s.follow_monitor)
         self.follow.toggled.connect(self._set_follow)
         f.addRow(self.follow)
-        root.addWidget(g)
+        bright_group = g
 
         # --- дополнительные функции
-        g = QGroupBox("Дополнительные функции")
+        g = QGroupBox("Сейчас играет")
         f = QFormLayout(g)
         self.media_cb = QCheckBox("«Сейчас играет»: трек и обложка из Spotify, Яндекс Музыки, браузера и других плееров")
         self.media_cb.setChecked(self.s.media_enabled)
@@ -737,7 +820,13 @@ class SettingsPage(QScrollArea):
         b_mdiag.clicked.connect(self._media_diag)
         mr.addWidget(b_mdiag)
         f.addRow(mr)
+        self.media_lbl.setWordWrap(True)
+        sec["music"].addWidget(hint("Трек и обложка берутся из Windows — оттуда же, где карточка музыки "
+                                    "у громкости. Если трек виден там, программа его тоже увидит."))
+        sec["music"].addWidget(g)
 
+        g = QGroupBox("Перегрев")
+        f = QFormLayout(g)
         self.alert_cb = QCheckBox("Предупреждать о перегреве")
         self.alert_cb.setChecked(self.s.alert_enabled)
         self.alert_cb.toggled.connect(self._alert_toggled)
@@ -765,11 +854,11 @@ class SettingsPage(QScrollArea):
         self.notify_cb.setChecked(self.s.alert_notify)
         self.notify_cb.toggled.connect(lambda on: self._set("alert_notify", on))
         f.addRow(self.notify_cb)
-        root.addWidget(g)
+        sec["games"].addWidget(g)
         self._alert_toggled(self.s.alert_enabled, save=False)
         self.toast_cb.setEnabled(self.s.media_enabled)
 
-        g = QGroupBox("Программа")
+        g = QGroupBox("Запуск и трей")
         v = QVBoxLayout(g)
         self.autostart = QCheckBox("Запускать вместе с Windows")
         if os.name == "nt":  # автозапуск мог включить установщик
@@ -786,6 +875,12 @@ class SettingsPage(QScrollArea):
             cb.setChecked(getattr(self.s, attr))
             cb.toggled.connect(lambda on, a=attr: self._set(a, on))
             v.addWidget(cb)
+        sec["main"].addWidget(g)
+        sec["main"].addWidget(bright_group)
+        sec["main"].addWidget(anim_group)
+
+        g = QGroupBox("Обновления и журнал")
+        v = QVBoxLayout(g)
         self.upd = QCheckBox("Проверять обновления на GitHub")
         self.upd.setChecked(self.s.check_updates)
         self.upd.toggled.connect(lambda on: self._set("check_updates", on))
@@ -799,12 +894,14 @@ class SettingsPage(QScrollArea):
         lr.addWidget(b_log)
         lr.addStretch(1)
         v.addLayout(lr)
-        root.addWidget(g)
-
-        root.addWidget(label(f"{APP_TITLE} {__version__} — свободная замена программе TURZX для "
-                             "Turing Smart Screen 3.5\". Исходный код: github.com/vyalu/turing-monitor-ru",
-                             "muted"))
-        root.addStretch(1)
+        about = label(f"{APP_TITLE} {__version__} — свободная замена программе TURZX для "
+                      "Turing Smart Screen 3.5\".\nИсходный код: github.com/vyalu/turing-monitor-ru", "muted")
+        about.setWordWrap(True)
+        about.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        sec["about"].addWidget(about)
+        sec["about"].addWidget(g)
+        for lay in sec.values():
+            lay.addStretch(1)
         self.refresh_admin()
         QTimer.singleShot(1500, self._fill_sensors)
 
@@ -856,7 +953,8 @@ class SettingsPage(QScrollArea):
                 return "город не выбран — погода не показывается"
             place = self.s.city or "определяется…"
         if "weather.temp" in vals:
-            return f"{place}: {vals['weather.temp']:.0f}°, {vals.get('weather.desc', '')}"
+            src = f" (источник: {w.source})" if w and getattr(w, "source", "") else ""
+            return f"{place}: {vals['weather.temp']:.0f}°, {vals.get('weather.desc', '')}{src}"
         if w and w.status and w.status != "город не выбран":
             return f"{place} — ошибка: {w.status}"
         return f"{place} — загрузка…"

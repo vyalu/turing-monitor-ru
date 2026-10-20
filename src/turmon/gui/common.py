@@ -59,6 +59,11 @@ QListWidget#nav {{ background: transparent; border: none; outline: 0; }}
 QListWidget#nav::item {{ padding: 9px 12px; margin: 2px 0; border-radius: 8px; color: {INK_2}; }}
 QListWidget#nav::item:selected {{ background: {SURFACE_4}; color: {INK}; font-weight: 500; }}
 QListWidget#nav::item:hover:!selected {{ background: {SURFACE_3}; }}
+QListWidget#subnav {{ background: transparent; border: none; outline: 0; }}
+QListWidget#subnav::item {{ padding: 0; margin: 2px 0; border-radius: 8px; color: {INK_2};
+    border-left: 3px solid transparent; }}
+QListWidget#subnav::item:selected {{ background: {SURFACE_2}; color: {INK}; border-left: 3px solid {ACCENT}; }}
+QListWidget#subnav::item:hover:!selected {{ background: {SURFACE_1}; color: {INK}; }}
 QListWidget {{ background: {SURFACE_2}; border: 1px solid {LINE}; border-radius: 10px; outline: 0; }}
 QListWidget::item {{ border-radius: 6px; padding: 3px 4px; }}
 QListWidget::item:selected {{ background: {SURFACE_4}; color: {INK}; }}
@@ -157,6 +162,45 @@ def apply_style(app: QApplication) -> None:
     pal.setColor(QPalette.Disabled, QPalette.WindowText, QColor(INK_3))
     app.setPalette(pal)
     app.setStyleSheet(QSS)
+    install_wheel_guard(app)
+
+
+class WheelGuard(QObject):
+    """Колёсико над списком, числом или ползунком не меняет значение, пока элемент не выбран щелчком.
+
+    Иначе, листая настройки, легко случайно переключить порт, датчик или размер текста.
+    Прокрутка при этом передаётся странице, как будто под курсором пусто.
+    """
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QAbstractScrollArea, QAbstractSpinBox, QComboBox, QSlider
+
+        if ev.type() != QEvent.Wheel or not isinstance(obj, QWidget):
+            return False
+        w = obj
+        if not isinstance(w, (QAbstractSpinBox, QComboBox, QSlider)):
+            p = w.parentWidget()  # поле ввода внутри числа/списка
+            if isinstance(p, (QAbstractSpinBox, QComboBox)):
+                w = p
+            else:
+                return False
+        if w.hasFocus() or w.property("wheel_ok"):
+            return False
+        if w.focusPolicy() == Qt.WheelFocus:
+            w.setFocusPolicy(Qt.StrongFocus)
+        # отдаём прокрутку ближайшей прокручиваемой области
+        a = w.parentWidget()
+        while a is not None and not isinstance(a, QAbstractScrollArea):
+            a = a.parentWidget()
+        if a is not None:
+            QApplication.sendEvent(a.verticalScrollBar(), ev)
+        return True
+
+
+def install_wheel_guard(app: QApplication) -> None:
+    app._wheel_guard = WheelGuard(app)  # держим ссылку
+    app.installEventFilter(app._wheel_guard)
 
 
 def app_icon() -> QIcon:

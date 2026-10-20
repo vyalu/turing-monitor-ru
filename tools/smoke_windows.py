@@ -45,6 +45,17 @@ def main() -> int:
         wp = WeatherProvider(None, None, "", auto=True)
         wv = wp.fetch()
         annotate("notice", "weather", f"{wp.location_label}: {wv.get('weather.temp')}° {wv.get('weather.desc')}")
+        from turmon.sensors import weather as wmod
+
+        for name, src in wmod.SOURCES:  # каждый источник отдельно (Краснодар)
+            try:
+                annotate("notice", f"weather {name}", repr(src(45.035, 38.975)))
+            except Exception as e:  # noqa: BLE001
+                annotate("warning", f"weather {name}", f"{e}")
+        try:
+            annotate("notice", "weather osm", repr(wmod._search_osm("Краснодар")[:2]))
+        except Exception as e:  # noqa: BLE001
+            annotate("warning", "weather osm", f"{e}")
     except Exception as e:  # noqa: BLE001
         annotate("warning", "weather", f"погода не получена: {e}")
     try:
