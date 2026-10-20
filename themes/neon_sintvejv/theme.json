@@ -23,7 +23,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -42,7 +44,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "graph",
@@ -61,7 +65,9 @@
       "fill": "#FF6AC133",
       "line": 2.0,
       "bg": "",
-      "style": "line"
+      "style": "line",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -80,7 +86,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -99,7 +107,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "graph",
@@ -118,7 +128,9 @@
       "fill": "#6AE4FF33",
       "line": 2.0,
       "bg": "",
-      "style": "line"
+      "style": "line",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -132,7 +144,9 @@
       "color": "#FF6AC133",
       "border": "",
       "border_width": 0,
-      "radius": 0
+      "radius": 0,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -151,7 +165,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -170,7 +186,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -189,7 +207,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -208,7 +228,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -227,7 +249,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -246,7 +270,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -265,7 +291,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text11",
+      "name": "FPS: text11",
+      "visible": true,
+      "x": 364,
+      "y": 252,
+      "text": "FPS",
+      "font": "Roboto-Bold",
+      "size": 10,
+      "color": "#B79CC8",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -284,7 +333,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text12",
+      "name": "FPS: text12",
+      "visible": true,
+      "x": 364,
+      "y": 270,
+      "text": "{fps.value:.0f}",
+      "font": "Roboto-Bold",
+      "size": 17,
+      "color": "#FFF4FB",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     }
   ]
 }

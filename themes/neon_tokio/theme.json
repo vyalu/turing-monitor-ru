@@ -18,7 +18,9 @@
       "color": "#FF4FD80A",
       "border": "#FF4FD833",
       "border_width": 1,
-      "radius": 16
+      "radius": 16,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -37,7 +39,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -56,7 +60,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -78,7 +84,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -97,7 +105,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -116,7 +126,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -130,7 +142,9 @@
       "color": "#FF4FD80A",
       "border": "#FF4FD833",
       "border_width": 1,
-      "radius": 16
+      "radius": 16,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -149,7 +163,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -168,7 +184,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -190,7 +208,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -209,7 +229,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -228,7 +250,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -242,7 +266,9 @@
       "color": "#FF4FD80A",
       "border": "#FF4FD833",
       "border_width": 1,
-      "radius": 16
+      "radius": 16,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -261,7 +287,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -280,7 +308,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -302,7 +332,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 85,
-      "alert_color": "#FF3B3B"
+      "alert_color": "#FF3B3B",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -321,7 +353,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -340,7 +374,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -359,7 +395,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -378,7 +416,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -397,7 +437,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -416,7 +458,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text16",
+      "name": "FPS: text16",
+      "visible": true,
+      "x": 464,
+      "y": 262,
+      "text": "FPS {fps.value:.0f} · 1% low {fps.low1:.0f}",
+      "font": "Roboto-Bold",
+      "size": 15,
+      "color": "#FFFFFF",
+      "align": "right",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -435,7 +500,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     }
   ]
 }

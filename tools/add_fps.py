@@ -38,17 +38,33 @@ PLAN: dict[str, tuple[dict, dict]] = {
     "sunset": ({"text10": "FPS", "text11": F, "text12": "1% " + LOW}, {"ram.load": "fps"}),
     "terminal": ({"text9": "fps " + F + " low " + LOW}, {}),
 }
-# у тем из дизайн-проекта три раскладки — повторяем по семействам
-for t in ("calm_grafit", "mono_oscil", "neon_kiber"):
-    PLAN[t] = ({"text13": "FPS", "text14": F + " · 1% " + LOW}, {"disk.load": "fps"})
-for t in ("calm_oliva", "mono_chertezh", "neon_sintvejv"):
-    PLAN[t] = ({"text11": "FPS", "text12": F}, {})
-for t in ("calm_pesok", "mono_tablo", "neon_arkada"):
-    PLAN[t] = ({"text12": "FPS", "text13": F + " · 1% " + LOW}, {"disk.load": "fps"})
-for t in ("calm_slanec", "mono_bumaga", "neon_toksik"):
-    PLAN[t] = ({"text12": "FPS", "text13": F}, {"net.down": "fps"})
-for t in ("calm_tuman", "mono_jantar", "neon_plazma"):
-    PLAN[t] = ({"text10": "FPS", "text11": "1% " + LOW, "text12": F}, {"disk.load": "fps"})
+# темы «Графит» (tools/make_themes_v2.py) собраны из общих раскладок — правила по тексту элементов
+BY_LAYOUT: dict[str, tuple[dict, dict]] = {
+    "lay_dash": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.load": "fps"}),
+    "lay_quad": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": "1% " + LOW, "{disk.load:.0f}%": F},
+                 {"disk.load": "fps"}),
+    "lay_clock": ({"NET": "FPS", "{net.down:speed}": F}, {"net.down": "fps"}),
+    "lay_graph": ({"ОТДАЧА": "FPS", "{net.up:speed}": F}, {}),
+    "lay_portrait": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.load": "fps"}),
+    "lay_strip": ({"ДИСК": "FPS", "{disk.load:.0f}%": F, "{disk.free:.0f} ГБ": "1% " + LOW}, {"disk.load": "fps"}),
+    "lay_hero": ({"ДИСК": "FPS", "{disk.load:.0f}%": F + " · 1% " + LOW}, {"disk.load": "fps"}),
+    "lay_temps": ({"RAM {ram.used:.1f}/{ram.total:.0f} ГБ": "FPS " + F + " · 1% low " + LOW}, {}),
+    "lay_minimal": ({"ПАМЯТЬ": "FPS", "{ram.load:.0f}%": F}, {"ram.load": "fps"}),
+    "lay_eq": ({"КУЛЕР": "FPS", "{gpu.fan_load:.0f}%": F}, {"gpu.fan_load": "fps"}),
+    "lay_portrait2": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ": "1% " + LOW, "{disk.load:.0f}%": F},
+                      {"disk.load": "fps"}),
+}
+TEXT_PLAN: dict[str, tuple[dict, dict]] = {}
+try:
+    import sys as _sys
+
+    _sys.path.insert(0, str(ROOT / "tools"))
+    import make_themes_v2 as _v2  # noqa: E402
+
+    for _tid, _name, _style, _pal, _lay, _land, _desc in _v2.THEMES:
+        TEXT_PLAN[_tid] = BY_LAYOUT[_lay.__name__]
+except ImportError:
+    pass
 
 
 def clean(widgets: list[dict]) -> list[dict]:
@@ -63,7 +79,8 @@ def clean(widgets: list[dict]) -> list[dict]:
 
 
 def apply(folder: Path) -> int:
-    plan = PLAN.get(folder.name)
+    by_text = folder.name in TEXT_PLAN
+    plan = TEXT_PLAN.get(folder.name) or PLAN.get(folder.name)
     if plan is None:
         return 0
     texts, sources = plan
@@ -74,8 +91,9 @@ def apply(folder: Path) -> int:
     for w in ws:
         out.append(w)
         clone = None
-        if w.get("type") == "text" and w.get("id") in texts:
-            spec = texts[w["id"]]
+        key = w.get("text") if by_text else w.get("id")
+        if w.get("type") == "text" and key in texts:
+            spec = texts[key]
             text, over = (spec, {}) if isinstance(spec, str) else spec
             clone = copy.deepcopy(w)
             clone.update(text=text, alert_above=None, **over)
@@ -91,7 +109,8 @@ def apply(folder: Path) -> int:
                          show_if=KEY, hide_if="")
             out.append(clone)
             n += 1
-    missing = set(texts) - {w["id"] for w in ws}
+    present = {w.get("text") if by_text else w["id"] for w in ws}
+    missing = set(texts) - present
     if missing:
         raise SystemExit(f"{folder.name}: нет элементов {missing}")
     d["widgets"] = out
@@ -106,7 +125,8 @@ if __name__ == "__main__":
             n = apply(f)
             total += n
             print(f"{f.name}: {n}")
-    left = sorted(f.name for f in THEMES.iterdir() if (f / "theme.json").exists() and f.name not in PLAN)
+    left = sorted(f.name for f in THEMES.iterdir()
+                  if (f / "theme.json").exists() and f.name not in PLAN and f.name not in TEXT_PLAN)
     if left:
         raise SystemExit(f"без FPS остались: {left}")
     print("элементов FPS:", total)

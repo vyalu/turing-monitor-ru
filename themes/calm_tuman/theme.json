@@ -18,7 +18,9 @@
       "color": "#FFFFFF99",
       "border": "",
       "border_width": 0,
-      "radius": 12
+      "radius": 12,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -37,7 +39,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -56,7 +60,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -75,7 +81,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -97,7 +105,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -111,7 +121,9 @@
       "color": "#FFFFFF99",
       "border": "",
       "border_width": 0,
-      "radius": 12
+      "radius": 12,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -130,7 +142,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -149,7 +163,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -168,7 +184,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -190,7 +208,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -204,7 +224,9 @@
       "color": "#FFFFFF99",
       "border": "",
       "border_width": 0,
-      "radius": 12
+      "radius": 12,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -223,7 +245,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -242,7 +266,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -261,7 +287,9 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -283,7 +311,9 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "rect",
@@ -297,7 +327,9 @@
       "color": "#FFFFFF99",
       "border": "",
       "border_width": 0,
-      "radius": 12
+      "radius": 12,
+      "show_if": "",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -316,7 +348,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text10",
+      "name": "FPS: text10",
+      "visible": true,
+      "x": 264,
+      "y": 182,
+      "text": "FPS",
+      "font": "Roboto-Medium",
+      "size": 11,
+      "color": "#5B6472",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -335,7 +390,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": null,
-      "alert_color": "#FF4D4D"
+      "alert_color": "#FF4D4D",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text11",
+      "name": "FPS: text11",
+      "visible": true,
+      "x": 448,
+      "y": 180,
+      "text": "1% {fps.low1:.0f}",
+      "font": "Roboto-Medium",
+      "size": 13,
+      "color": "#5B6472",
+      "align": "right",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#FF4D4D",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "text",
@@ -354,7 +432,30 @@
       "shadow": false,
       "shadow_color": "#000000AA",
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "text",
+      "id": "fps_text12",
+      "name": "FPS: text12",
+      "visible": true,
+      "x": 262,
+      "y": 202,
+      "text": "{fps.value:.0f}",
+      "font": "Roboto-Light",
+      "size": 52,
+      "color": "#15181D",
+      "align": "left",
+      "width": 0,
+      "line_spacing": 1.15,
+      "shadow": false,
+      "shadow_color": "#000000AA",
+      "alert_above": null,
+      "alert_color": "#D32F2F",
+      "show_if": "fps.value",
+      "hide_if": ""
     },
     {
       "type": "bar",
@@ -376,7 +477,33 @@
       "segments": 0,
       "gap": 2,
       "alert_above": 90,
-      "alert_color": "#D32F2F"
+      "alert_color": "#D32F2F",
+      "show_if": "",
+      "hide_if": "fps.value"
+    },
+    {
+      "type": "bar",
+      "id": "fps_bar4",
+      "name": "FPS: bar4",
+      "visible": true,
+      "x": 264,
+      "y": 276,
+      "w": 184,
+      "h": 4,
+      "source": "fps.value",
+      "min": 0.0,
+      "max": 144.0,
+      "color": "#C2410C",
+      "color2": "",
+      "bg": "#15181D1A",
+      "radius": 2,
+      "direction": "right",
+      "segments": 0,
+      "gap": 2,
+      "alert_above": null,
+      "alert_color": "#D32F2F",
+      "show_if": "fps.value",
+      "hide_if": ""
     }
   ]
 }

@@ -77,6 +77,8 @@ class HomePage(QWidget):
         # статус экрана показывается внизу боковой панели (MainWindow забирает этот виджет)
         self.status = QLabel("…")
         self.status.setObjectName("status_bad")
+        self.status.setWordWrap(True)
+        self.status.setMaximumWidth(200)
         self.pawn_box = QFrame()
         self.pawn_box.setObjectName("banner")
         pb = QHBoxLayout(self.pawn_box)
@@ -241,7 +243,8 @@ class HomePage(QWidget):
 
     def reload_gallery(self) -> None:
         """Перерисовать миниатюры всех тем и показать текущий раздел."""
-        vals = sample_values()
+        # миниатюры — в обычном виде, без игровых и «музыкальных» вставок
+        vals = {k: v for k, v in sample_values().items() if not k.startswith(("fps.", "media.", "alert."))}
         self._thumbs = []
         cache = getattr(self, "_thumb_cache", {})
         new_cache = {}
@@ -283,11 +286,21 @@ class HomePage(QWidget):
         self.gallery.clear()
         orient = max(0, self.orient.currentIndex())
         # альбомные кадры ниже портретных: в фильтре «Альбомные» строки плотнее
-        self.gallery.setGridSize(QSize(THUMB + 26, (THUMB * 2 // 3 if orient == 1 else THUMB) + 50))
+        if orient == 0:
+            # смешанный список: ячейки по размеру кадра, без общей сетки — нет пустых полос
+            self.gallery.setGridSize(QSize())
+            self.gallery.setSpacing(4)
+        else:
+            self.gallery.setSpacing(0)
+            self.gallery.setGridSize(QSize(THUMB + 26, (THUMB * 2 // 3 if orient == 1 else THUMB) + 50))
         items = [(e, ic) for e, ic in self._thumbs if e.section == key
                  and (orient == 0 or e.landscape == (orient == 1))]
+        if orient == 0:  # сначала альбомные, потом портретные — ряды без пустот
+            items.sort(key=lambda x: not x[0].landscape)
         for e, icon in items:
             it = QListWidgetItem(icon, e.name.replace(" (TURZX)", ""))
+            if orient == 0:
+                it.setSizeHint(QSize(THUMB + 18, (THUMB * 2 // 3 if e.landscape else THUMB) + 40))
             it.setData(Qt.UserRole, e.id)
             kind = {"builtin": "Встроенная тема", "user": "Ваша тема", "imported": "Импорт из TURZX"}[key]
             it.setToolTip(kind + (", альбомная" if e.landscape else ", портретная"))
@@ -950,8 +963,7 @@ class MainWindow(QMainWindow):
         self.home = HomePage(self)
         foot = QHBoxLayout()
         foot.setContentsMargins(8, 0, 8, 0)
-        foot.addWidget(self.home.status)
-        foot.addStretch(1)
+        foot.addWidget(self.home.status, 1)
         sl.addLayout(foot)
         self.editor = EditorPage(engine)
         self.settings_page = SettingsPage(self)
