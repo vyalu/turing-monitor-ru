@@ -46,6 +46,9 @@ def label(text: str, obj: str = "") -> QLabel:
     return lbl
 
 
+THUMB = 176  # длинная сторона миниатюры темы в галерее, px
+
+
 # ---------------------------------------------------------------- «Экран»
 class HomePage(QWidget):
     edit_requested = Signal(str)
@@ -62,14 +65,22 @@ class HomePage(QWidget):
         # слева — живой экран
         left, ll = card()
         left.setFixedWidth(420)
-        ll.addWidget(label("Мини-экран", "h1"))
-        self.status = label("…", "status_bad")
-        ll.addWidget(self.status)
+        head = QHBoxLayout()
+        head.addWidget(label("Мини-экран", "h1"), 1)
+        self.b_pause = QPushButton("Выключить")
+        self.b_pause.setObjectName("ghost")
+        self.b_pause.setCheckable(True)
+        self.b_pause.setToolTip("Погасить мини-экран, не закрывая программу")
+        self.b_pause.toggled.connect(self._pause)
+        head.addWidget(self.b_pause)
+        ll.addLayout(head)
+        # статус экрана показывается внизу боковой панели (MainWindow забирает этот виджет)
+        self.status = QLabel("…")
+        self.status.setObjectName("status_bad")
         self.pawn_box = QFrame()
-        self.pawn_box.setStyleSheet("QFrame{background:#3A2A12; border:1px solid #6B4B1C; border-radius:8px;}"
-                                    "QLabel{color:#FFD49A; border:none; background:transparent;}")
+        self.pawn_box.setObjectName("banner")
         pb = QHBoxLayout(self.pawn_box)
-        pb.setContentsMargins(10, 6, 6, 6)
+        pb.setContentsMargins(14, 8, 8, 8)
         pb.addWidget(label("Температура процессора недоступна: нужен драйвер PawnIO."), 1)
         self.b_pawn = QPushButton("Установить")
         self.b_pawn.setObjectName("primary")
@@ -78,18 +89,21 @@ class HomePage(QWidget):
         self.pawn_box.setVisible(False)
         ll.addWidget(self.pawn_box)
         self.preview = QLabel()
+        self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setMinimumHeight(500)
-        self.preview.setStyleSheet("background:#0B0D10; border-radius:10px;")
+        self.preview.setMinimumHeight(420)
         ll.addWidget(self.preview, 1)
 
         row = QHBoxLayout()
-        row.addWidget(QLabel("Яркость"))
+        l_b = QLabel("Яркость")
+        l_b.setFixedWidth(110)
+        row.addWidget(l_b)
         self.bright = QSlider(Qt.Horizontal)
         self.bright.setRange(0, 100)
         self.bright.setValue(s.brightness)
         self.bright_lbl = QLabel(f"{s.brightness}%")
-        self.bright_lbl.setFixedWidth(40)
+        self.bright_lbl.setFixedWidth(44)
+        self.bright_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._bright_timer = QTimer(self)
         self._bright_timer.setSingleShot(True)
         self._bright_timer.timeout.connect(self._apply_brightness)
@@ -100,7 +114,9 @@ class HomePage(QWidget):
         ll.addLayout(row)
 
         row_s = QHBoxLayout()
-        row_s.addWidget(QLabel("Размер текста"))
+        l_s = QLabel("Размер текста")
+        l_s.setFixedWidth(110)
+        row_s.addWidget(l_s)
         self.scale = QSlider(Qt.Horizontal)
         self.scale.setRange(70, 170)
         self.scale.setSingleStep(5)
@@ -108,7 +124,8 @@ class HomePage(QWidget):
         self.scale.setToolTip("Крупнее или мельче текст и значки в текущей теме. "
                               "Запоминается отдельно для каждой темы.")
         self.scale_lbl = QLabel()
-        self.scale_lbl.setFixedWidth(40)
+        self.scale_lbl.setFixedWidth(44)
+        self.scale_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._scale_timer = QTimer(self)
         self._scale_timer.setSingleShot(True)
         self._scale_timer.timeout.connect(self._apply_scale)
@@ -130,10 +147,6 @@ class HomePage(QWidget):
         self.flip.toggled.connect(self._flip)
         ll.addWidget(self.flip)
         row2 = QHBoxLayout()
-        self.b_pause = QPushButton("Выключить экран")
-        self.b_pause.setCheckable(True)
-        self.b_pause.toggled.connect(self._pause)
-        row2.addWidget(self.b_pause)
         b_rc = QPushButton("Переподключить")
         b_rc.clicked.connect(lambda: self.engine.reconnect())
         row2.addWidget(b_rc)
@@ -157,19 +170,32 @@ class HomePage(QWidget):
         rl.addWidget(label("Нажмите на тему, чтобы вывести её на экран. Двойной щелчок — редактировать.",
                            "muted"))
 
+        filters = QHBoxLayout()
         self.sections = QTabBar()
+        self.sections.setObjectName("seg")
         self.sections.setExpanding(False)
         self.sections.setDrawBase(False)
         for t in ("Встроенные", "Мои", "Из TURZX"):
             self.sections.addTab(t)
         self.sections.currentChanged.connect(lambda _i: self._fill_gallery())
-        rl.addWidget(self.sections)
+        filters.addWidget(self.sections)
+        filters.addStretch(1)
+        self.orient = QTabBar()
+        self.orient.setObjectName("seg")
+        self.orient.setExpanding(False)
+        self.orient.setDrawBase(False)
+        for t in ("Все", "Альбомные", "Портретные"):
+            self.orient.addTab(t)
+        self.orient.currentChanged.connect(lambda _i: self._fill_gallery())
+        filters.addWidget(self.orient)
+        rl.addLayout(filters)
         self._thumbs: list[tuple] = []
 
         self.gallery = QListWidget()
+        self.gallery.setObjectName("gallery")
         self.gallery.setViewMode(QListView.IconMode)
-        self.gallery.setIconSize(QSize(200, 200))
-        self.gallery.setGridSize(QSize(216, 236))
+        self.gallery.setIconSize(QSize(THUMB, THUMB))
+        self.gallery.setUniformItemSizes(False)
         self.gallery.setResizeMode(QListView.Adjust)
         self.gallery.setMovement(QListView.Static)
         self.gallery.setWordWrap(True)
@@ -181,6 +207,7 @@ class HomePage(QWidget):
 
         btns = QHBoxLayout()
         b_edit = QPushButton("Редактировать")
+        b_edit.setObjectName("primary")
         b_edit.clicked.connect(self._edit_current)
         b_dup = QPushButton("Сделать копию")
         b_dup.clicked.connect(self._duplicate)
@@ -214,8 +241,11 @@ class HomePage(QWidget):
                 img = Renderer(t, self.engine.scale_for(t)).render(vals)
             except Exception:  # noqa: BLE001
                 continue
-            k = 200 / max(img.size)
-            self._thumbs.append((e, QIcon(pil_to_pixmap(img, k))))
+            pm = pil_to_pixmap(img, THUMB / max(img.size))
+            icon = QIcon()
+            icon.addPixmap(pm, QIcon.Normal)
+            icon.addPixmap(pm, QIcon.Selected)  # без синей заливки поверх кадра выбранной темы
+            self._thumbs.append((e, icon))
         counts = {key: sum(1 for e, _ in self._thumbs if e.section == key) for key in self.SECTION_KEYS}
         for i, (key, name) in enumerate(zip(self.SECTION_KEYS, self.SECTION_NAMES)):
             self.sections.setTabText(i, f"{name}  {counts[key]}")
@@ -235,17 +265,22 @@ class HomePage(QWidget):
         key = self.SECTION_KEYS[max(0, self.sections.currentIndex())]
         cur = self.engine.settings.theme
         self.gallery.clear()
-        items = [(e, ic) for e, ic in self._thumbs if e.section == key]
+        orient = max(0, self.orient.currentIndex())
+        # альбомные кадры ниже портретных: в фильтре «Альбомные» строки плотнее
+        self.gallery.setGridSize(QSize(THUMB + 26, (THUMB * 2 // 3 if orient == 1 else THUMB) + 50))
+        items = [(e, ic) for e, ic in self._thumbs if e.section == key
+                 and (orient == 0 or e.landscape == (orient == 1))]
         for e, icon in items:
             it = QListWidgetItem(icon, e.name.replace(" (TURZX)", ""))
             it.setData(Qt.UserRole, e.id)
             kind = {"builtin": "Встроенная тема", "user": "Ваша тема", "imported": "Импорт из TURZX"}[key]
-            it.setToolTip(kind + (", альбомная" if e.landscape else ", книжная"))
+            it.setToolTip(kind + (", альбомная" if e.landscape else ", портретная"))
             self.gallery.addItem(it)
             if e.id == cur:
                 self.gallery.setCurrentItem(it)
         if not items:
-            it = QListWidgetItem(self.EMPTY_TEXT.get(key, ""))
+            text = self.EMPTY_TEXT.get(key, "") if orient == 0 else "В этом разделе нет тем такой ориентации."
+            it = QListWidgetItem(text)
             it.setFlags(Qt.NoItemFlags)
             it.setSizeHint(QSize(600, 80))
             self.gallery.addItem(it)
@@ -356,7 +391,7 @@ class HomePage(QWidget):
         self.engine.settings.save()
 
     def _pause(self, on: bool) -> None:
-        self.b_pause.setText("Включить экран" if on else "Выключить экран")
+        self.b_pause.setText("Включить" if on else "Выключить")
         self.engine.set_paused(on)
         self.win.tray_update()
 
@@ -698,17 +733,40 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(central)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
+        side = QFrame()
+        side.setObjectName("sidebar")
+        side.setFixedWidth(220)
+        sl = QVBoxLayout(side)
+        sl.setContentsMargins(10, 16, 10, 16)
+        sl.setSpacing(4)
+        brand = QHBoxLayout()
+        brand.setContentsMargins(8, 0, 8, 12)
+        brand.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(app_icon().pixmap(28, 28))
+        brand.addWidget(logo)
+        names = QVBoxLayout()
+        names.setSpacing(0)
+        names.addWidget(label("Turing Monitor", "brand"))
+        names.addWidget(label(f"RU · {__version__}", "muted"))
+        brand.addLayout(names, 1)
+        sl.addLayout(brand)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        self.nav.setFixedWidth(190)
-        for t in ("🖥  Экран и темы", "🎨  Редактор тем", "⚙  Настройки"):
+        for t in ("Экран и темы", "Редактор тем", "Настройки"):
             self.nav.addItem(t)
-        lay.addWidget(self.nav)
+        sl.addWidget(self.nav, 1)
+        lay.addWidget(side)
         self.stack = QStackedWidget()
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
         self.home = HomePage(self)
+        foot = QHBoxLayout()
+        foot.setContentsMargins(8, 0, 8, 0)
+        foot.addWidget(self.home.status)
+        foot.addStretch(1)
+        sl.addLayout(foot)
         self.editor = EditorPage(engine)
         self.settings_page = SettingsPage(self)
         for p in (self.home, self.editor, self.settings_page):
