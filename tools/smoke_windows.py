@@ -39,6 +39,14 @@ def main() -> int:
     annotate("notice", "sensors", f"всего {len(sens)}\n{sample}")
     annotate("notice", "values", "\n".join(f"{k}={v[k]}" for k in sorted(v) if not k.startswith(("time", "date"))))
     hub.stop()
+    try:
+        from turmon.sensors.weather import WeatherProvider
+
+        wp = WeatherProvider(None, None, "", auto=True)
+        wv = wp.fetch()
+        annotate("notice", "weather", f"{wp.location_label}: {wv.get('weather.temp')}° {wv.get('weather.desc')}")
+    except Exception as e:  # noqa: BLE001
+        annotate("warning", "weather", f"погода не получена: {e}")
     return 0 if "cpu.load" in v else 1
 
 
