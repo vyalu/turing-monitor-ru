@@ -48,6 +48,24 @@ def main() -> int:
     except Exception as e:  # noqa: BLE001
         annotate("warning", "weather", f"погода не получена: {e}")
     try:
+        import tempfile
+
+        from turmon.sensors.media import MediaProvider
+
+        mp = MediaProvider(Path(tempfile.gettempdir()) / "tm_covers")
+        mp.start()
+        time.sleep(4)
+        vals = {}
+        mp.update(vals)
+        mp.stop()
+        ok = not mp.status
+        annotate("notice" if ok else "error", "media", f"статус: {mp.status or 'ок'}; данные: {vals or 'ничего не играет'}")
+        if not ok:
+            return 1
+    except Exception as e:  # noqa: BLE001
+        annotate("error", "media", f"медиа: {e}")
+        return 1
+    try:
         import subprocess
 
         from turmon.sensors.fps import presentmon_path

@@ -58,6 +58,13 @@ class Engine:
         self.lhm: LhmProvider | None = None
         self.system: SystemProvider | None = None
         self.fps = None
+        self.media = None
+        from .overlay import OverheatWatch
+
+        self.overheat = OverheatWatch()
+        self.on_alert: Callable[[str], None] | None = None
+        self._t_start = time.monotonic()
+        self._last_alert_notify = -1e9
 
     # ---- жизненный цикл ----
     def start(self) -> None:
@@ -77,6 +84,12 @@ class Engine:
 
             self.fps = FpsProvider()
             self.hub.add(self.fps)
+        if s.media_enabled:
+            from .paths import data_dir
+            from .sensors.media import MediaProvider
+
+            self.media = MediaProvider(data_dir() / "covers")
+            self.hub.add(self.media)
         self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto)
         self.hub.add(self.weather)
         self._thread = threading.Thread(target=self._run, name="engine", daemon=True)
@@ -288,6 +301,71 @@ class Engine:
             self.lhm.disk_index = s.disk_index
         self.hub.custom = s.custom_values()
 
+    # ---- включаемые функции ----
+    def _swap_provider(self, attr: str, make) -> None:
+        old = getattr(self, attr)
+        if old is not None:
+            try:
+                old.stop()
+            except Exception:  # noqa: BLE001
+                pass
+            if old in self.hub.providers:
+                self.hub.providers.remove(old)
+            setattr(self, attr, None)
+        if make is not None:
+            p = make()
+            self.hub.add(p)
+            setattr(self, attr, p)
+
+    def set_fps_enabled(self, on: bool) -> None:
+        self.settings.fps_enabled = on
+        from .sensors.fps import FpsProvider
+
+        self._swap_provider("fps", FpsProvider if on else None)
+
+    def set_media_enabled(self, on: bool) -> None:
+        self.settings.media_enabled = on
+        from .paths import data_dir
+        from .sensors.media import MediaProvider
+
+        self._swap_provider("media", (lambda: MediaProvider(data_dir() / "covers")) if on else None)
+
+    # ---- вставки поверх темы ----
+    def _watch_alerts(self, values: dict) -> bool:
+        s = self.settings
+        if not s.alert_enabled:
+            self.overheat.active.clear()
+            return False
+        w = self.overheat
+        w.cpu_limit, w.gpu_limit, w.seconds = float(s.alert_cpu), float(s.alert_gpu), float(s.alert_seconds)
+        started = w.update(values)
+        values.update(w.values())
+        if started and s.alert_notify and self.on_alert and time.monotonic() - self._last_alert_notify > 300:
+            self._last_alert_notify = time.monotonic()
+            try:
+                self.on_alert(w.text)
+            except Exception:  # noqa: BLE001
+                pass
+        return bool(w.active) and s.alert_blink
+
+    def _overlays(self, frame, values: dict):
+        from . import overlay
+
+        now = time.monotonic()
+        anim = False
+        m = self.media
+        if m is not None and self.settings.media_toast and m.track_changed_at:
+            age = now - m.track_changed_at
+            # трек, который уже играл при запуске программы, «новым» не считаем
+            fresh = m.track_changed_at - self._t_start > 6
+            if fresh and age < overlay.TOAST_SECONDS and values.get("media.title"):
+                frame = overlay.draw_toast(frame, values, age)
+                anim = age < 0.6 or age > overlay.TOAST_SECONDS - 0.7
+        if self.overheat.active and self.settings.alert_enabled and self.settings.alert_blink:
+            frame = overlay.draw_alert(frame, "Перегрев: " + self.overheat.text, now)
+            anim = True
+        return frame, anim
+
     # ---- внутреннее ----
     def _set_status(self, text: str) -> None:
         if text != self.status:
@@ -339,8 +417,11 @@ class Engine:
                 theme, renderer = self.theme, self.renderer
             self.hub.update()
             values, history = self.hub.snapshot()
+            busy = self._watch_alerts(values)
             try:
                 frame = renderer.render(values, history)
+                frame, anim = self._overlays(frame, values)
+                busy = busy or anim
             except Exception:  # noqa: BLE001
                 log.exception("Ошибка отрисовки")
                 frame = Image.new("RGB", theme.size, (0, 0, 0))
@@ -367,6 +448,8 @@ class Engine:
                         self._lost(e)
 
             period = max(float(theme.refresh or 1.0), 1.0 / max(0.2, self.settings.fps_limit))
+            if busy:  # мигание рамки и появление плашки — чаще, чем обычный кадр
+                period = min(period, 0.25)
             delay = max(0.05, period - (time.monotonic() - t0))
             self._wake.wait(delay)
             self._wake.clear()

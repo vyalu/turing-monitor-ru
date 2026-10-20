@@ -666,6 +666,51 @@ class SettingsPage(QScrollArea):
         f.addRow(self.follow)
         root.addWidget(g)
 
+        # --- дополнительные функции
+        g = QGroupBox("Дополнительные функции")
+        f = QFormLayout(g)
+        self.media_cb = QCheckBox("«Сейчас играет»: трек и обложка из Spotify, Яндекс Музыки, браузера и других плееров")
+        self.media_cb.setChecked(self.s.media_enabled)
+        self.media_cb.toggled.connect(self._media_toggled)
+        f.addRow(self.media_cb)
+        self.toast_cb = QCheckBox("Показывать на мини-экране плашку при смене трека (на 7 секунд)")
+        self.toast_cb.setChecked(self.s.media_toast)
+        self.toast_cb.toggled.connect(lambda on: self._set("media_toast", on))
+        f.addRow(self.toast_cb)
+        self.media_lbl = label("", "muted")
+        f.addRow(self.media_lbl)
+
+        self.alert_cb = QCheckBox("Предупреждать о перегреве")
+        self.alert_cb.setChecked(self.s.alert_enabled)
+        self.alert_cb.toggled.connect(self._alert_toggled)
+        f.addRow(self.alert_cb)
+        ar2 = QHBoxLayout()
+        self.a_cpu, self.a_gpu, self.a_sec = QSpinBox(), QSpinBox(), QSpinBox()
+        for sb, lo, hi, val, suf, attr in ((self.a_cpu, 50, 110, self.s.alert_cpu, " °C", "alert_cpu"),
+                                           (self.a_gpu, 50, 110, self.s.alert_gpu, " °C", "alert_gpu"),
+                                           (self.a_sec, 1, 600, self.s.alert_seconds, " с", "alert_seconds")):
+            sb.setRange(lo, hi)
+            sb.setValue(int(val))
+            sb.setSuffix(suf)
+            sb.valueChanged.connect(lambda v, a=attr: self._set(a, int(v)))
+        for t, w_ in (("CPU выше", self.a_cpu), ("GPU выше", self.a_gpu), ("дольше", self.a_sec)):
+            ar2.addWidget(QLabel(t))
+            ar2.addWidget(w_)
+            ar2.addSpacing(10)
+        ar2.addStretch(1)
+        f.addRow(ar2)
+        self.blink_cb = QCheckBox("Мигать красной рамкой на мини-экране")
+        self.blink_cb.setChecked(self.s.alert_blink)
+        self.blink_cb.toggled.connect(lambda on: self._set("alert_blink", on))
+        f.addRow(self.blink_cb)
+        self.notify_cb = QCheckBox("Уведомление Windows (не чаще раза в 5 минут)")
+        self.notify_cb.setChecked(self.s.alert_notify)
+        self.notify_cb.toggled.connect(lambda on: self._set("alert_notify", on))
+        f.addRow(self.notify_cb)
+        root.addWidget(g)
+        self._alert_toggled(self.s.alert_enabled, save=False)
+        self.toast_cb.setEnabled(self.s.media_enabled)
+
         g = QGroupBox("Программа")
         v = QVBoxLayout(g)
         self.autostart = QCheckBox("Запускать вместе с Windows")
@@ -762,6 +807,7 @@ class SettingsPage(QScrollArea):
         if self.isVisible():
             self.city_cur.setText(self._city_text())
             self.refresh_fps()
+            self.refresh_media()
 
     def _weather_auto(self, on: bool) -> None:
         self.s.weather_auto = on
@@ -863,9 +909,37 @@ class SettingsPage(QScrollArea):
         self.b_pawn2.setVisible(not v)
 
     def _fps_toggled(self, on: bool) -> None:
-        self.s.fps_enabled = on
+        self.engine.set_fps_enabled(on)
         self.s.save()
-        self.refresh_fps()
+        QTimer.singleShot(500, self.refresh_fps)
+
+    def _media_toggled(self, on: bool) -> None:
+        self.engine.set_media_enabled(on)
+        self.s.save()
+        self.toast_cb.setEnabled(on)
+        QTimer.singleShot(1500, self.refresh_media)
+
+    def _alert_toggled(self, on: bool, save: bool = True) -> None:
+        if save:
+            self._set("alert_enabled", on)
+        for w_ in (self.a_cpu, self.a_gpu, self.a_sec, self.blink_cb, self.notify_cb):
+            w_.setEnabled(on)
+
+    def refresh_media(self) -> None:
+        m = self.engine.media
+        vals = self.engine.hub.values
+        if not self.s.media_enabled:
+            text = "выключено"
+        elif m is None:
+            text = "запускается…"
+        elif not m.available:
+            text = f"недоступно: {m.status}"
+        elif vals.get("media.title"):
+            text = (f"сейчас: {vals.get('media.artist', '')} — {vals['media.title']}"
+                    f"  ({vals.get('media.app', '')})")
+        else:
+            text = "ничего не играет"
+        self.media_lbl.setText(text)
 
     def refresh_fps(self) -> None:
         p = self.engine.fps
@@ -873,7 +947,7 @@ class SettingsPage(QScrollArea):
         if not self.s.fps_enabled:
             text = "выключено"
         elif p is None:
-            text = "включится после перезапуска программы"
+            text = "запускается…"
         elif not p.available:
             text = f"недоступно: {p.status}"
         elif "fps.value" in vals:
@@ -978,6 +1052,9 @@ class MainWindow(QMainWindow):
         self.bridge = Bridge()
         self.bridge.frame.connect(self.home.show_frame)
         self.bridge.status.connect(self._status)
+        self.bridge.alert.connect(lambda t: self.tray.showMessage(
+            APP_TITLE, f"Перегрев: {t}. Проверьте охлаждение.", QSystemTrayIcon.Warning, 8000))
+        engine.on_alert = self.bridge.alert.emit
         engine.on_frame = self.bridge.frame.emit
         engine.on_status = self.bridge.status.emit
         self._status(engine.status)

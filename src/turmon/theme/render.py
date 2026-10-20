@@ -183,9 +183,15 @@ class Renderer:
         shadow = parse_color(w.get("shadow_color"), (0, 0, 0, 170)) if w.get("shadow") else None
         x0 = y0 = 1e9
         x1 = y1 = -1e9
+        clip = bool(w.get("clip")) and width > 0
         for i, line in enumerate(lines):
             parts = fonts.runs(line, fname, size * SS)
             lw = sum(d.textlength(t, font=f) for t, f in parts)
+            if clip and lw > width:
+                while line and lw > width:
+                    line = line[:-1].rstrip()
+                    parts = fonts.runs(line + "…", fname, size * SS)
+                    lw = sum(d.textlength(t, font=f) for t, f in parts)
             if width > 0:
                 lx = x + {"left": 0, "center": (width - lw) / 2, "right": width - lw}.get(align, 0)
             else:
@@ -442,4 +448,13 @@ class Renderer:
         draw_weather_icon(img, (x, y, s), kind,
                           parse_color(w.get("color"), (255, 255, 255, 255)),
                           parse_color(w.get("accent"), (255, 201, 77, 255)))
+        return (x, y, x + s, y + s)
+
+    def _w_cover(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
+        from ..overlay import draw_cover
+
+        x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
+        s = num(w.get("size"), 96) * SS
+        draw_cover(img, (x, y, s, s), values.get("media.cover"), num(w.get("radius"), 12) * SS,
+                   parse_color(w.get("placeholder")))
         return (x, y, x + s, y + s)

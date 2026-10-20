@@ -26,6 +26,14 @@ class Settings:
     follow_monitor: bool = True          # гасить мини-экран, когда гаснут мониторы
     check_updates: bool = True
     fps_enabled: bool = True             # FPS в играх через PresentMon
+    media_enabled: bool = True           # «Сейчас играет» из медиа-элементов Windows
+    media_toast: bool = True             # всплывающая плашка о новом треке на мини-экране
+    alert_enabled: bool = True           # предупреждение о перегреве
+    alert_cpu: int = 90
+    alert_gpu: int = 85
+    alert_seconds: int = 10
+    alert_blink: bool = True             # мигающая рамка на мини-экране
+    alert_notify: bool = True            # уведомление Windows
 
     city: str = ""
     lat: float | None = None

@@ -44,6 +44,7 @@ WIDGETS: dict[str, dict[str, Any]] = {
             Field("color", "Цвет", "color", "#FFFFFF"),
             Field("align", "Выравнивание", "choice", "left", ALIGN),
             Field("width", "Ширина поля (0 = авто)", "int", 0, lo=0, hi=2000),
+            Field("clip", "Обрезать «…», если не влезает в ширину", "bool", False),
             Field("line_spacing", "Межстрочный интервал", "float", 1.15, lo=0.5, hi=4),
             Field("shadow", "Тень", "bool", False),
             Field("shadow_color", "Цвет тени", "color", "#000000AA"),
@@ -123,6 +124,14 @@ WIDGETS: dict[str, dict[str, Any]] = {
             Field("w", "Ширина (0 = как есть)", "int", 0, lo=0, hi=4000),
             Field("h", "Высота (0 = как есть)", "int", 0, lo=0, hi=4000),
             Field("opacity", "Непрозрачность, %", "int", 100, lo=0, hi=100),
+        ),
+    },
+    "cover": {
+        "label": "Обложка трека",
+        "fields": _POS + (
+            Field("size", "Размер", "int", 96, lo=8, hi=1000),
+            Field("radius", "Скругление", "int", 12, lo=0, hi=500),
+            Field("placeholder", "Фон без обложки (пусто = ничего)", "color", "#FFFFFF14"),
         ),
     },
     "weather_icon": {

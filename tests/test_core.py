@@ -233,3 +233,32 @@ def test_theme_pack_roundtrip(tmp_path, monkeypatch):
         z.writestr("../../escape.txt", "boom")
     tl.import_pack(evil)
     assert not (tmp_path / "escape.txt").exists() and not (tmp_path.parent / "escape.txt").exists()
+
+
+def test_overheat_watch_needs_duration_and_hysteresis():
+    from turmon.overlay import OverheatWatch
+
+    w = OverheatWatch(cpu_limit=90, gpu_limit=85, seconds=10, hysteresis=3)
+    assert w.update({"cpu.temp": 95}, now=0) == []
+    assert w.update({"cpu.temp": 95}, now=5) == []          # ещё рано
+    assert w.update({"cpu.temp": 95}, now=10.5) == ["CPU"]  # держится 10 с — тревога
+    assert w.values()["alert.text"] == "Перегрев: CPU 95°"
+    assert w.update({"cpu.temp": 89}, now=12) == [] and w.active  # гистерезис: ещё горит
+    w.update({"cpu.temp": 86}, now=13)
+    assert not w.active
+    assert w.update({"cpu.temp": 95, "gpu.temp": 40}, now=14) == []  # снова надо выждать
+
+
+def test_overlays_render():
+    from PIL import Image
+
+    from turmon.overlay import draw_alert, draw_toast
+
+    f = Image.new("RGB", (480, 320), (10, 10, 10))
+    a = draw_alert(f, "Перегрев: CPU 95°", 0.0)
+    assert a.size == f.size and a.getpixel((2, 160))[0] > 200
+    t = draw_toast(f, {"media.title": "Очень длинное название трека " * 3, "media.artist": "Исполнитель",
+                       "media.progress": 40}, 2.0)
+    assert t.size == f.size and t.getpixel((240, 300)) != (10, 10, 10)
+    p = Image.new("RGB", (320, 480))
+    assert draw_toast(p, {"media.title": "Трек"}, 1.0).size == (320, 480)

@@ -51,6 +51,8 @@ BY_LAYOUT: dict[str, tuple[dict, dict]] = {
     "lay_temps": ({"RAM {ram.used:.1f}/{ram.total:.0f} ГБ": "FPS " + F + " · 1% low " + LOW}, {}),
     "lay_minimal": ({"ПАМЯТЬ": "FPS", "{ram.load:.0f}%": F}, {"ram.load": "fps"}),
     "lay_eq": ({"КУЛЕР": "FPS", "{gpu.fan_load:.0f}%": F}, {"gpu.fan_load": "fps"}),
+    "lay_player": ({"СЕТЬ": "FPS", "{net.down:speed}": F}, {}),
+    "lay_player_p": ({"↑ {net.up:speed}": "FPS " + F}, {}),
     "lay_portrait2": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ": "1% " + LOW, "{disk.load:.0f}%": F},
                       {"disk.load": "fps"}),
 }

@@ -184,6 +184,7 @@ class Bridge(QObject):
 
     frame = Signal(object)
     status = Signal(str)
+    alert = Signal(str)
 
 
 def qcolor(s: str) -> QColor | None:

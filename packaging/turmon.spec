@@ -18,7 +18,7 @@ if (ROOT / "presentmon").is_dir():
     datas.append((str(ROOT / "presentmon"), "presentmon"))
 
 binaries, hiddenimports = [], ["clr", "pycaw.pycaw", "comtypes.stream"]
-for pkg in ("clr_loader", "pythonnet"):
+for pkg in ("clr_loader", "pythonnet", "winrt"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

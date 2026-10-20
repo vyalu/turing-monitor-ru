@@ -476,6 +476,89 @@ def lay_portrait2(k: K):
     return w
 
 
+def _now_playing_bottom(k: K, y: int, w_: int, x: int = 16, cols=None):
+    """Нижняя полоса плеера: компактные показатели в колонках."""
+    p, s = k.p, k.s
+    out = k.panel(x, y, w_, 304 - y + (160 if w_ < 300 else 0))
+    cols = cols or (("CPU", "{cpu.load:.0f}%", "{cpu.temp:.0f}°"), ("GPU", "{gpu.load:.0f}%", "{gpu.temp:.0f}°"),
+                    ("RAM", "{ram.load:.0f}%", "{ram.used:.1f} ГБ"), ("Сеть", "{net.down:speed}", ""))
+    step = (w_ - 32) / len(cols)
+    for i, (t, v, sub) in enumerate(cols):
+        cx = int(x + 16 + i * step)
+        out.append(k.label(cx, y + 12, t, 10))
+        out.append(k.val(cx, y + 28, v, 20, font=s["f_val"]))
+        if sub:
+            out.append(k.text(cx, y + 56, sub, 11, p["muted"], s["f_lbl"]))
+    return out
+
+
+def lay_player(k: K):
+    """Плеер 480×320: обложка, трек, исполнитель, прогресс; без музыки — крупные часы."""
+    p, s = k.p, k.s
+    M = "media.title"
+    w = [W("cover", x=16, y=16, size=180, radius=0 if k.style == "mono" else 14,
+           placeholder=p["panel"] or p["track"], show_if=M),
+         k.label(212, 20, "Сейчас играет", 10),
+         k.text(464, 18, "{media.app}", 11, p["muted"], s["f_lbl"], "right"),
+         k.text(212, 44, "{media.title}", 22, font=s["f_big"] if k.style != "calm" else "Roboto-Medium",
+                width=252, clip=True),
+         k.text(212, 78, "{media.artist}", 15, p["c1"], s["f_val"], width=252, clip=True),
+         k.text(212, 102, "{media.album}", 11, p["muted"], s["f_lbl"], width=252, clip=True),
+         k.bar(212, 170, 252, "media.progress", "c1", "c1b", h=4 if k.style != "mono" else 8),
+         k.text(212, 182, "{media.state}  {media.position}", 11, p["muted"], s["f_val"]),
+         k.text(464, 182, "{media.duration}", 11, p["muted"], s["f_val"], "right")]
+    for x in w:
+        if x["type"] != "cover":
+            x["show_if"] = M
+    idle = [k.text(20, 20, "{time.hm}", 92 if k.style != "mono" else 78, font=s["f_clock"]),
+            k.text(24, 132, "{date.weekday}, {date.long}", 16, p["muted"], s["f_val"]),
+            k.icon(368, 34, 56),
+            k.val(460, 104, "{weather.temp:.0f}°", 26, "right", font=s["f_val"]),
+            k.text(460, 140, "{weather.desc}", 11, p["muted"], s["f_lbl"], "right"),
+            k.text(24, 168, "Включите музыку — здесь появится трек и обложка", 11, p["muted"], s["f_lbl"])]
+    for x in idle:
+        x["hide_if"] = M
+    return w + idle + _now_playing_bottom(k, 216, 448)
+
+
+def lay_player_p(k: K):
+    """Плеер 320×480: большая обложка сверху."""
+    p, s = k.p, k.s
+    M = "media.title"
+    w = [W("cover", x=56, y=16, size=208, radius=0 if k.style == "mono" else 18,
+           placeholder=p["panel"] or p["track"], show_if=M),
+         k.text(16, 236, "{media.title}", 20, font=s["f_big"] if k.style != "calm" else "Roboto-Medium",
+                align="center", width=288, clip=True),
+         k.text(16, 266, "{media.artist}", 14, p["c1"], s["f_val"], "center", width=288, clip=True),
+         k.bar(24, 296, 272, "media.progress", "c1", "c1b", h=4 if k.style != "mono" else 8),
+         k.text(24, 306, "{media.position}", 11, p["muted"], s["f_val"]),
+         k.text(160, 306, "{media.app}", 11, p["muted"], s["f_lbl"], "center"),
+         k.text(296, 306, "{media.duration}", 11, p["muted"], s["f_val"], "right")]
+    for x in w:
+        if x["type"] != "cover":
+            x["show_if"] = M
+    idle = [k.text(160, 40, "{time.hm}", 72, font=s["f_clock"], align="center"),
+            k.text(160, 128, "{date.weekday}, {date.long}", 14, p["muted"], s["f_val"], "center"),
+            k.icon(104, 170, 56),
+            k.val(176, 178, "{weather.temp:.0f}°", 30, font=s["f_val"]),
+            k.text(160, 262, "Включите музыку —", 12, p["muted"], s["f_lbl"], "center"),
+            k.text(160, 280, "здесь появится обложка", 12, p["muted"], s["f_lbl"], "center")]
+    for x in idle:
+        x["hide_if"] = M
+    cols = (("CPU", "{cpu.load:.0f}%", "{cpu.temp:.0f}°"), ("GPU", "{gpu.load:.0f}%", "{gpu.temp:.0f}°"),
+            ("RAM", "{ram.load:.0f}%", "{ram.used:.1f} ГБ"))
+    bottom = k.panel(16, 336, 288, 128)
+    step = 256 / 3
+    for i, (t, v, sub) in enumerate(cols):
+        cx = int(32 + i * step)
+        bottom.append(k.label(cx, 352, t, 10))
+        bottom.append(k.val(cx, 370, v, 22, font=s["f_val"]))
+        bottom.append(k.text(cx, 402, sub, 11, p["muted"], s["f_lbl"]))
+    bottom.append(k.text(32, 432, "↓ {net.down:speed}", 13, p["c1"], s["f_val"]))
+    bottom.append(k.text(288, 432, "↑ {net.up:speed}", 13, p["up"], s["f_val"], "right"))
+    return w + idle + bottom
+
+
 THEMES = [
     # id, name, style, palette, layout, landscape, description
     ("calm_grafit", "Графит", "calm", "grafit", lay_dash, True, "Два тонких кольца, три полосы и сеть. Голубой акцент из иконки программы."),
@@ -513,6 +596,11 @@ THEMES = [
     ("mono_lcd", "ЖК-дисплей", "mono", "lcd", lay_minimal, True, "Тёмные цифры на зеленоватом фоне старого ЖК."),
     ("mono_sepia", "Сепия", "mono", "sepia", lay_eq, True, "Коричневые шкалы на кремовой бумаге."),
     ("mono_vfd", "Вакуумный индикатор", "mono", "vfd", lay_portrait2, False, "Портретная, бирюзовое свечение ВЛИ."),
+    # плеер: «Сейчас играет»
+    ("calm_pleer", "Плеер", "calm", "grafit", lay_player, True, "Обложка, трек и прогресс; без музыки — часы и погода."),
+    ("neon_pleer", "Плеер неон", "neon", "kiber", lay_player, True, "Игровой плеер с обложкой и показателями."),
+    ("neon_pleer_p", "Плеер портретный", "neon", "sintvejv", lay_player_p, False, "Большая обложка сверху."),
+    ("mono_pleer", "Плеер-табло", "mono", "tablo", lay_player, True, "Оранжевое табло с текущим треком."),
 ]
 
 
