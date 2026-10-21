@@ -37,6 +37,24 @@ PLAN: dict[str, tuple[dict, dict]] = {
     "rings": ({"text12": F, "text13": "FPS", "text14": "1% " + LOW}, {"disk.load": "fps"}),
     "sunset": ({"text10": "FPS", "text11": F, "text12": "1% " + LOW}, {"ram.load": "fps"}),
     "terminal": ({"text9": "fps " + F + " low " + LOW}, {}),
+    # уникальные темы (tools/make_themes_v3.py)
+    "uniq_batarejki": ({"text9": F, "text10": "FPS"}, {"disk.load": "fps"}),
+    "uniq_chasy_kolca": ({"text7": "FPS", "text8": F + " · 1% " + LOW}, {"ram.load": "fps"}),
+    "uniq_chek": ({"text16": "FPS", "text17": F, "text18": "  1% low", "text19": LOW,
+                   "text20": "  кадр", "text21": "{fps.frametime:.1f} мс"}, {}),
+    "uniq_gradusnik": ({"text2": "FPS " + F + " · 1% " + LOW}, {}),
+    "uniq_kalendar": ({"text7": "FPS " + F + " · 1% low " + LOW}, {}),
+    "uniq_kosmos": ({"text9": "FPS", "text10": F + " · 1% " + LOW}, {}),
+    "uniq_metro": ({"text13": "FPS", "text14": F + " · 1% " + LOW}, {}),
+    "uniq_orbity": ({"text10": "FPS", "text11": F, "text12": "1% " + LOW}, {"gpu.mem_load": "fps"}),
+    "uniq_pogoda": ({"text16": "FPS " + F + " · 1% " + LOW}, {}),
+    "uniq_polosy": ({"text13": "FPS", "text14": "1% low " + LOW, "text15": F}, {"disk.load": "fps"}),
+    "uniq_pribory": ({"text17": "FPS " + F}, {}),
+    "uniq_radar": ({"text10": "FPS   " + F + "  1% " + LOW}, {}),
+    "uniq_rpg": ({"text25": "FPS", "text26": F}, {}),
+    "uniq_tablica": ({"text23": "FPS", "text24": F, "text25": LOW, "text26": "{fps.frametime:.1f} мс"},
+                     {"disk.load": "fps"}),
+    "uniq_vyveska": ({"text7": "FPS " + F}, {}),
 }
 # темы «Графит» (tools/make_themes_v2.py) собраны из общих раскладок — правила по тексту элементов
 BY_LAYOUT: dict[str, tuple[dict, dict]] = {

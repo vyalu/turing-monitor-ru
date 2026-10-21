@@ -49,6 +49,8 @@ def block_of_key(key: str) -> str | None:
         return "fan"
     if k == "sys.uptime":
         return "uptime"
+    if k in ("cpu.name", "gpu.name"):  # название — скорее заголовок темы, чем часть блока
+        return None
     head = k.split(".", 1)[0]
     return {"cpu": "cpu", "gpu": "gpu", "ram": "ram", "disk": "disk", "net": "net", "weather": "weather",
             "sys": "system", "mb": "board", "volume": "volume", "fps": "fps", "media": "media", "user": "user"}.get(head)
@@ -86,6 +88,11 @@ def _gap(a, b) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
+def _same_row(a, b) -> bool:
+    ha, hb = a[3] - a[1], b[3] - b[1]
+    return abs((a[1] + a[3]) / 2 - (b[1] + b[3]) / 2) < max(ha, hb) * 0.65
+
+
 @dataclass
 class Block:
     key: str
@@ -118,38 +125,66 @@ def theme_blocks(theme: Theme, bboxes: dict[str, tuple] | None = None, widgets=N
         if key:
             add(i, key)
     owned = [i for i, k in own.items() if k]
-    for i, w in enumerate(ws):
-        if own[i]:
-            continue
-        t = w.get("type")
-        box = bb(w)
-        if t == "text":
-            # подпись: следующий по списку элемент с показателем рядом (так собираются блоки при
-            # создании темы), потом предыдущий, потом просто ближайший
-            pick = None
-            cond = (w.get("show_if") or "", w.get("hide_if") or "")
 
-            def same(j: int) -> bool:  # подпись «ДИСК» прячется в игре — значит, она от диска, а не от FPS
-                return (ws[j].get("show_if") or "", ws[j].get("hide_if") or "") == cond
-            for j in (i + 1, i + 2, i - 1, i - 2):
-                if 0 <= j < len(ws) and own.get(j) and same(j) and _gap(box, bb(ws[j])) < 120:
+    def center_in(inner, outer) -> bool:
+        return outer[0] <= (inner[0] + inner[2]) / 2 <= outer[2] and outer[1] <= (inner[1] + inner[3]) / 2 <= outer[3]
+
+    # 1) карточки-подложки: внутри только элементы одного блока
+    cards: list[tuple[tuple, str]] = []
+    for i, w in enumerate(ws):
+        if own[i] or w.get("type") not in ("rect", "circle", "image"):
+            continue
+        box = bb(w)
+        inside = {own[j] for j in owned if center_in(bb(ws[j]), box)}
+        inside.discard("fps")  # FPS временно встаёт на место другого блока
+        if len(inside) == 1:
+            key = inside.pop()
+            add(i, key)
+            cards.append((box, key))
+    # 2) подписи
+    for i, w in enumerate(ws):
+        if own[i] or w.get("type") != "text":
+            continue
+        box = bb(w)
+        text = str(w.get("text") or "")
+        if not any(ch.isalnum() for ch in text):
+            continue  # разделители «- - - -», стрелки и т. п. — оформление
+        mine = [(c, k) for c, k in cards if center_in(box, c)]
+        if mine:  # подпись на карточке блока
+            add(i, min(mine, key=lambda ck: (ck[0][2] - ck[0][0]) * (ck[0][3] - ck[0][1]))[1])
+            continue
+        pick = None
+        cond = (w.get("show_if") or "", w.get("hide_if") or "")
+        # заголовок столбца таблицы («ЗАГРУЗКА», под ним строки разных блоков) — ни к чему не относится
+        cx = (box[0] + box[2]) / 2
+        below = {own[j] for j in owned if box[3] - 1 <= bb(ws[j])[1] <= box[3] + 170
+                 and bb(ws[j])[0] - 2 <= cx <= bb(ws[j])[2] + 2 and own[j] != "fps"}
+        peers = [j for j, x in enumerate(ws) if j != i and not own[j] and x.get("type") == "text"
+                 and _same_row(box, bb(x))]
+        header = (len(below) >= 2 and len(peers) >= 3) or (len(below) >= 3 and len(peers) >= 2)
+        if header and not any(_same_row(box, bb(ws[j])) for j in owned):
+            continue
+
+        def same(j: int) -> bool:  # подпись «ДИСК» прячется в игре — значит, она от диска, а не от FPS
+            return (ws[j].get("show_if") or "", ws[j].get("hide_if") or "") == cond
+        near = [j for j in (i + 1, i + 2, i + 3, i - 1, i - 2) if 0 <= j < len(ws) and own.get(j) and same(j)]
+        # сначала — значение в той же строке («ПРОЦЕССОР ...... 37%»), потом соседнее по списку
+        for j in near:
+            if _same_row(box, bb(ws[j])):
+                pick = own[j]
+                break
+        if pick is None:
+            for j in near:
+                if _gap(box, bb(ws[j])) < 120:
                     pick = own[j]
                     break
-            cands = [j for j in owned if same(j)]
-            if pick is None and cands:
-                j = min(cands, key=lambda j: _gap(box, bb(ws[j])))
-                if _gap(box, bb(ws[j])) < 50:
-                    pick = own[j]
-            if pick:
-                add(i, pick)
-        elif t in ("rect", "circle", "image"):
-            # карточка-подложка: внутри только элементы одного блока
-            inside = {own[j] for j in owned
-                      if box[0] <= (bb(ws[j])[0] + bb(ws[j])[2]) / 2 <= box[2]
-                      and box[1] <= (bb(ws[j])[1] + bb(ws[j])[3]) / 2 <= box[3]}
-            inside.discard("fps")  # FPS временно встаёт на место другого блока
-            if len(inside) == 1:
-                add(i, inside.pop())
+        cands = [j for j in owned if same(j)]
+        if pick is None and cands:
+            j = min(cands, key=lambda j: _gap(box, bb(ws[j])))
+            if _gap(box, bb(ws[j])) < 30:
+                pick = own[j]
+        if pick:
+            add(i, pick)
     order = [k for k, _ in BLOCKS]
     return sorted(result.values(), key=lambda b: order.index(b.key) if b.key in order else 99)
 
