@@ -34,6 +34,10 @@ class Engine:
         self.hub.custom = settings.custom_values()
         self.theme: Theme = theme_lib.load(settings.theme)
         self.renderer = Renderer(self.theme, self.scale_for(self.theme))
+        self._blocks_cache: tuple[int, list] | None = None
+        self.hidden_skip: set[str] = set()
+        self.hide_fps = False
+        self._update_hidden(True)
         self.display: Display = TuringRevA(settings.port, settings.chunk)
         self.sender = FrameSender(self.display)
         self.on_frame: FrameCallback | None = None
@@ -183,6 +187,46 @@ class Engine:
         values = float(self.settings.value_scales.get(key, labels))
         return labels, values
 
+    # ---- скрытые блоки темы ----
+    def theme_blocks(self) -> list:
+        """Блоки текущей темы (для галочек «Показывать на экране»)."""
+        from .theme.blocks import blocks_for
+
+        t = self.theme
+        if self._blocks_cache is None or self._blocks_cache[0] != id(t):
+            try:
+                self._blocks_cache = (id(t), blocks_for(t))
+            except Exception:  # noqa: BLE001
+                log.exception("Блоки темы")
+                self._blocks_cache = (id(t), [])
+        return self._blocks_cache[1]
+
+    def hidden_blocks(self) -> set[str]:
+        return set(self.settings.hidden_blocks.get(self._scale_key(self.theme), []))
+
+    def _update_hidden(self, apply: bool) -> None:
+        from .theme.blocks import hidden_ids
+
+        keys = self.hidden_blocks() if apply else set()
+        self.hidden_skip = hidden_ids(self.theme_blocks(), keys) if keys else set()
+        self.hide_fps = "fps" in keys  # FPS скрыт — в игре блок на его месте остаётся как обычно
+
+    def set_block_hidden(self, block: str, hidden: bool) -> None:
+        with self._lock:
+            key = self._scale_key(self.theme)
+            cur = self.hidden_blocks()
+            if hidden:
+                cur.add(block)
+            else:
+                cur.discard(block)
+            if cur:
+                self.settings.hidden_blocks[key] = sorted(cur)
+            else:
+                self.settings.hidden_blocks.pop(key, None)
+            self._update_hidden(True)
+            self.sender.invalidate()
+        self._wake.set()
+
     def set_scales(self, labels: float, values: float) -> None:
         with self._lock:
             key = self._scale_key(self.theme)
@@ -206,6 +250,8 @@ class Engine:
             orient_changed = theme.landscape != self.theme.landscape
             self.theme = theme
             self.renderer = Renderer(theme, self.scale_for(theme))
+            # в предпросмотре из редактора показываем все элементы, иначе — без скрытых блоков
+            self._update_hidden(not isinstance(theme_id, Theme))
             self.sender.invalidate()
             if orient_changed:
                 self._need_setup = True
@@ -531,7 +577,12 @@ class Engine:
                     if anim_every:
                         values = dict(values)
                         values["media.anim"] = self.settings.vinyl_anim
-                frame = renderer.render(values, history)
+                skip = None
+                if page == "main" and self.hidden_skip:
+                    skip = self.hidden_skip
+                if page == "main" and self.hide_fps:
+                    values = {k: x for k, x in values.items() if not k.startswith("fps.")}
+                frame = renderer.render(values, history, skip=skip)
                 frame, anim = self._overlays(frame, values)
                 busy = busy or anim
             except Exception:  # noqa: BLE001

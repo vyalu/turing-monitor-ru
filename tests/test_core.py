@@ -399,3 +399,21 @@ def test_browser_bridge(tmp_path, monkeypatch):
     assert v["media.title"] == "Другая" and v["media.playing"] == 0
     assert "подключено" in mux.extension_status()
     mux.stop()
+
+
+def test_theme_blocks_hide():
+    from turmon import themes as tl
+    from turmon.theme.blocks import blocks_for, hidden_ids
+    from turmon.theme.render import Renderer
+    from turmon.theme.sources import sample_values
+
+    t = tl.load("builtin:calm_grafit")
+    bl = {b.key: b for b in blocks_for(t)}
+    names = {w["id"]: w.get("text") or w.get("source") for w in t.widgets}
+    assert "ВИДЕОПАМЯТЬ" in [names[i] for i in bl["vram"].ids]
+    assert "ДИСК" in [names[i] for i in bl["disk"].ids]  # подпись диска не уходит к FPS
+    assert "СЕТЬ" in [names[i] for i in bl["net"].ids]
+    skip = hidden_ids(list(bl.values()), {"net"})
+    r = Renderer(t)
+    r.render(sample_values(), {}, skip=skip)
+    assert not (skip & set(r.bboxes)) and "net.down" not in {names[i] for i in r.bboxes}

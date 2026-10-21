@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QTimeEdit, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QTimeEdit, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
                                QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QSpinBox, QStackedWidget, QSystemTrayIcon,
@@ -142,6 +142,11 @@ class HomePage(QWidget):
         self.flip.toggled.connect(self._flip)
         ll.addWidget(self.flip)
         row2 = QHBoxLayout()
+        self.b_blocks = QPushButton("Что показывать…")
+        self.b_blocks.setToolTip("Скрыть ненужные блоки текущей темы (например, «Время работы»), "
+                                 "не создавая новую тему")
+        self.b_blocks.clicked.connect(self._show_blocks)
+        row2.addWidget(self.b_blocks)
         b_rc = QPushButton("Переподключить")
         b_rc.clicked.connect(lambda: self.engine.reconnect())
         row2.addWidget(b_rc)
@@ -365,6 +370,13 @@ class HomePage(QWidget):
             sl.blockSignals(False)
             sl.value_label.setText(f"{v}%")
 
+    def _show_blocks(self) -> None:
+        pop = BlocksPopup(self, self.engine)
+        pop.adjustSize()
+        pos = self.b_blocks.mapToGlobal(self.b_blocks.rect().topLeft())
+        pop.move(pos.x(), pos.y() - pop.height() - 6)
+        pop.show()
+
     def _apply_scale(self) -> None:
         self.engine.set_scales(self.scale.value() / 100, self.vscale.value() / 100)
         self.engine.settings.save()
@@ -505,6 +517,53 @@ class HomePage(QWidget):
         self.status.setObjectName("status_ok" if self.engine.connected else "status_bad")
         self.status.style().unpolish(self.status)
         self.status.style().polish(self.status)
+
+
+class BlocksPopup(QFrame):
+    """Галочки «что показывать» для текущей темы. Закрывается щелчком мимо."""
+
+    def __init__(self, parent: QWidget, engine: Engine) -> None:
+        super().__init__(parent, Qt.Popup)
+        self.engine = engine
+        self.setObjectName("card")
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(6)
+        lay.addWidget(label("Показывать на мини-экране", "h2"))
+        h = hint("Снимите галочку — блок пропадёт с экрана вместе с подписью. Тема не меняется, "
+                 "вернуть можно в любой момент. Запоминается для каждой темы.")
+        h.setMaximumWidth(340)
+        lay.addWidget(h)
+        blocks = engine.theme_blocks()
+        hidden = engine.hidden_blocks()
+        self.boxes: list[QCheckBox] = []
+        if not blocks:
+            e = hint("В этой теме нет отдельных блоков: например, тема из TURZX, где всё нарисовано "
+                     "одной картинкой. Скрыть элементы можно в редакторе.")
+            e.setMaximumWidth(340)
+            lay.addWidget(e)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(4)
+        for i, b in enumerate(blocks):
+            cb = QCheckBox(b.title)
+            cb.setChecked(b.key not in hidden)
+            if b.key == "fps":
+                cb.setToolTip("Показывается только во время игры вместо одного из блоков")
+            cb.toggled.connect(lambda on, k=b.key: self.engine.set_block_hidden(k, not on) or
+                               self.engine.settings.save())
+            grid.addWidget(cb, i // 2, i % 2)
+            self.boxes.append(cb)
+        lay.addLayout(grid)
+        if blocks:
+            br = QHBoxLayout()
+            b_all = QPushButton("Показать всё")
+            b_all.setObjectName("ghost")
+            b_all.clicked.connect(lambda: [c.setChecked(True) for c in self.boxes])
+            br.addWidget(b_all)
+            br.addStretch(1)
+            lay.addLayout(br)
 
 
 def short_path(p: Path) -> str:
