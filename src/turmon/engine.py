@@ -36,6 +36,13 @@ class Engine:
         self.theme: Theme = theme_lib.load(settings.theme)
         self.renderer = Renderer(self.theme, self.scale_for(self.theme))
         self._blocks_cache: tuple[int, list] | None = None
+        self.active_id = settings.theme   # тема на экране (может отличаться от выбранной — автосмена)
+        self.theme_reason = ""
+        self._previewing = False
+        self._manual_until = 0.0
+        self._in_game = False
+        self._fps_seen_since = 0.0
+        self._fps_last = 0.0
         self.hidden_skip: set[str] = set()
         self.hide_fps = False
         self._update_hidden(True)
@@ -253,12 +260,24 @@ class Engine:
 
     # ---- команды из интерфейса ----
     def set_theme(self, theme_id: str | Theme) -> None:
+        if isinstance(theme_id, str):
+            # выбрали тему вручную — показываем её, автосмена продолжится через минуту
+            self._manual_until = time.monotonic() + self.MANUAL_HOLD
+        self._activate(theme_id, save=True)
+
+    MANUAL_HOLD = 60.0
+
+    def _activate(self, theme_id: str | Theme, save: bool = False) -> None:
         with self._lock:
             if isinstance(theme_id, Theme):
                 theme = theme_id
+                self._previewing = True
             else:
                 theme = theme_lib.load(theme_id)
-                self.settings.theme = theme_id
+                if save:
+                    self.settings.theme = theme_id
+                self.active_id = theme_id
+                self._previewing = False
             orient_changed = theme.landscape != self.theme.landscape
             self.theme = theme
             self.renderer = Renderer(theme, self.scale_for(theme))
@@ -273,7 +292,82 @@ class Engine:
 
     def preview_theme(self, theme: Theme | None) -> None:
         """Временно показать тему из редактора (None — вернуть выбранную)."""
-        self.set_theme(theme if theme is not None else self.settings.theme)
+        if theme is not None:
+            self._activate(theme)
+        else:
+            self._previewing = False
+            self._activate(self.desired_theme()[0])
+
+    # ---- автоматическая смена тем ----
+    @staticmethod
+    def _in_window(frm: str, to: str, now: time.struct_time | None = None) -> bool:
+        now = now or time.localtime()
+        cur = now.tm_hour * 60 + now.tm_min
+
+        def mins(hm: str) -> int:
+            try:
+                h, m = hm.split(":")
+                return int(h) % 24 * 60 + int(m) % 60
+            except ValueError:
+                return 0
+        a, b = mins(frm), mins(to)
+        if a == b:
+            return False
+        return (a <= cur < b) if a < b else (cur >= a or cur < b)
+
+    def _game_active(self, values: dict, now: float) -> bool:
+        """Идёт игра: FPS держится 3 с; закончилась — FPS нет 10 с (свернули игру на миг — не мигаем)."""
+        has = values.get("fps.value") not in (None, "")
+        if has:
+            self._fps_seen_since = self._fps_seen_since or now
+            self._fps_last = now
+        else:
+            self._fps_seen_since = 0.0
+        if self._in_game:
+            if not has and now - self._fps_last > 10:
+                self._in_game = False
+        elif has and now - self._fps_seen_since >= 3:
+            self._in_game = True
+        return self._in_game
+
+    def _exists(self, tid: str) -> bool:
+        try:
+            return bool(tid) and theme_lib.exists(tid)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def desired_theme(self, values: dict | None = None, now: float | None = None) -> tuple[str, str]:
+        """(тема, причина) — какую тему сейчас показывать."""
+        s = self.settings
+        now = time.monotonic() if now is None else now
+        values = values if values is not None else self.hub.values
+        game = self._game_active(values, now)
+        if s.game_theme_enabled and game and self._exists(s.game_theme):
+            return s.game_theme, "игра"
+        if now < self._manual_until:
+            return s.theme, "выбрана вручную"
+        if s.night_theme_enabled and self._exists(s.night_theme) and self._in_window(
+                s.night_theme_from, s.night_theme_to):
+            return s.night_theme, "ночь"
+        if s.rotate_enabled:
+            lst = [t for t in s.rotate_themes if self._exists(t)]
+            if len(lst) >= 2:
+                period = max(3, int(s.rotate_seconds or 15))
+                return lst[int(time.time() // period) % len(lst)], "по очереди"
+        return s.theme, ""
+
+    def _auto_theme(self, values: dict) -> None:
+        if self._previewing:
+            return
+        tid, why = self.desired_theme(values)
+        self.theme_reason = why
+        if tid != self.active_id:
+            try:
+                self._activate(tid)
+                log.info("Тема: %s (%s)", tid, why or "выбранная")
+            except Exception as e:  # noqa: BLE001
+                log.warning("Не удалось переключить тему на %s: %s", tid, e)
+                self.active_id = tid  # не пытаться каждый кадр
 
     @property
     def blank(self) -> bool:
@@ -485,12 +579,12 @@ class Engine:
     def _player_animated(self, values: dict) -> bool:
         """Интервал кадров для анимации пластинки (0 — анимации нет)."""
         anim = self.settings.vinyl_anim
-        if anim not in ("spin", "glow") or not values.get("media.playing"):
+        if anim not in ("spin", "eq", "glow") or not values.get("media.playing"):
             return 0.0
         pg = self.renderer.page_data()
         if not any(w.get("type") == "vinyl" and w.get("visible", True) for w in pg.get("widgets", [])):
             return 0.0
-        return 1 / 20 if anim == "spin" else 1 / 10
+        return 1 / 20 if anim == "spin" else 1 / 15
 
     @property
     def page(self) -> str:
@@ -571,6 +665,9 @@ class Engine:
             if self.hub.version != seen:  # датчики опрашиваются в своём потоке — здесь только новые данные
                 seen = self.hub.version
                 raw, history = self.hub.snapshot()
+                self._auto_theme(raw)
+                with self._lock:
+                    theme, renderer = self.theme, self.renderer
                 alert_busy = self._watch_alerts(raw)
                 self.smoother.set_target(raw, t0)
             smooth = self.settings.smooth

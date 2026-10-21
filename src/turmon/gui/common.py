@@ -101,6 +101,9 @@ QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1px solid {LINE_STRONG};
     background: {FIELD}; }}
 QCheckBox::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
+QListView::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1px solid {LINE_STRONG};
+    background: {FIELD}; }}
+QListView::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}

@@ -52,19 +52,6 @@ def _shine(size: int) -> Image.Image:
     return layer
 
 
-@functools.lru_cache(maxsize=4)
-def _ring(size: int, accent: Color) -> Image.Image:
-    """Мягкое кольцо по краю пластинки (для анимации «подсветка»)."""
-    mask = Image.new("L", (size, size), 0)
-    d = ImageDraw.Draw(mask)
-    w = max(2, size // 40)
-    d.ellipse((w, w, size - 1 - w, size - 1 - w), outline=230, width=w)
-    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.8))
-    layer = Image.new("RGBA", (size, size), (*accent[:3], 0))
-    layer.putalpha(mask)
-    return layer
-
-
 @functools.lru_cache(maxsize=16)
 def _label(path: str, mtime: float, size: int, accent: Color) -> Image.Image:
     """Круглая «этикетка» в центре: обложка трека или цветная метка с нотой."""
@@ -90,16 +77,10 @@ def _label(path: str, mtime: float, size: int, accent: Color) -> Image.Image:
 
 def draw_vinyl(img: Image.Image, pos: tuple[float, float], size: int, cover: Any, angle: float,
                color: Color, groove: Color, accent: Color, label_k: float, shine: bool,
-               glow: float = -1.0) -> None:
+               eq: float = -1.0) -> None:
     x, y = int(pos[0]), int(pos[1])
     size = max(8, int(size))
     img.paste(_disc(size, color, groove, accent), (x, y), _disc(size, color, groove, accent))
-    if glow >= 0:  # «дышащая» подсветка ободка в цвет темы
-        ring = _ring(size, accent)
-        a = ring.getchannel("A").point(lambda p, k=0.25 + 0.75 * glow: int(p * k))
-        layer = ring.copy()
-        layer.putalpha(a)
-        img.paste(layer, (x, y), layer)
     ls = max(4, int(size * label_k))
     path = str(cover or "")
     try:
@@ -114,6 +95,42 @@ def draw_vinyl(img: Image.Image, pos: tuple[float, float], size: int, cover: Any
     if shine:
         sh = _shine(size)
         img.paste(sh, (x, y), sh)
+    if eq >= 0:
+        draw_eq(img, (x + size / 2, y + size / 2), ls, eq, accent)
+
+
+# частоты и сдвиги полосок эквалайзера: не в такт друг другу, но плавно
+_EQ = ((2.1, 0.0), (3.3, 1.7), (2.7, 3.1), (3.9, 0.9), (2.4, 2.4))
+
+
+def eq_levels(t: float) -> list[float]:
+    out = []
+    for f, ph in _EQ:
+        v = 0.55 + 0.30 * math.sin(t * f + ph) + 0.15 * math.sin(t * f * 2.3 + ph * 1.7)
+        out.append(min(1.0, max(0.12, v)))
+    return out
+
+
+def draw_eq(img: Image.Image, center: tuple[float, float], label_size: int, t: float, accent: Color) -> None:
+    """Мини-эквалайзер в центре этикетки: пять полосок «прыгают», пока играет трек.
+
+    Занимает маленький участок экрана, поэтому по USB идёт плавно даже на 20 кадрах в секунду.
+    """
+    cx, cy = center
+    w = label_size * 0.46
+    h = label_size * 0.30
+    n = len(_EQ)
+    gap = w * 0.06
+    bw = (w - gap * (n + 1)) / n
+    x0, y0 = cx - w / 2, cy - h / 2
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rounded_rectangle((x0, y0, x0 + w, y0 + h), radius=h * 0.28, fill=(10, 11, 14, 190))
+    inner = h * 0.72
+    base = y0 + h - (h - inner) / 2
+    for i, lv in enumerate(eq_levels(t)):
+        bx = x0 + gap + i * (bw + gap)
+        bh = max(bw, inner * lv)
+        d.rounded_rectangle((bx, base - bh, bx + bw, base), radius=bw / 2, fill=accent)
 
 
 # ---------------------------------------------------------------- палитра темы

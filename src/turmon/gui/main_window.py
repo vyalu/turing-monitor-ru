@@ -720,6 +720,7 @@ class ExtensionDialog(QDialog):
 # ---------------------------------------------------------------- «Настройки»
 SETTINGS_SECTIONS = (
     ("main", "Основные", "Автозапуск, яркость, плавность"),
+    ("auto", "Смена тем", "По очереди, ночью, в игре"),
     ("weather", "Погода", "Город и свой текст"),
     ("music", "Музыка", "«Сейчас играет» и режим плеера"),
     ("games", "Игры и перегрев", "FPS и предупреждения"),
@@ -1027,9 +1028,10 @@ class SettingsPage(QWidget):
         vr.addWidget(QLabel("Анимация пластинки"))
         self.vinyl = QComboBox()
         for key, text in (("none", "Без анимации"), ("spin", "Плавное вращение"),
-                          ("glow", "Подсветка — ободок мягко «дышит»")):
+                          ("eq", "Эквалайзер на этикетке")):
             self.vinyl.addItem(text, key)
-        self.vinyl.setCurrentIndex(max(0, self.vinyl.findData(self.s.vinyl_anim)))
+        self.vinyl.setCurrentIndex(max(0, self.vinyl.findData("eq" if self.s.vinyl_anim == "glow"
+                                                              else self.s.vinyl_anim)))
         self.vinyl.setToolTip("Только пока трек играет. Анимация чаще обновляет мини-экран — "
                               "на слабом USB-подключении выберите «Без анимации».")
         self.vinyl.currentIndexChanged.connect(lambda: self._set("vinyl_anim", self.vinyl.currentData()))
@@ -1141,10 +1143,143 @@ class SettingsPage(QWidget):
         about.setTextInteractionFlags(Qt.TextSelectableByMouse)
         sec["about"].addWidget(about)
         sec["about"].addWidget(g)
+        self._build_auto(sec["auto"])
         for lay in sec.values():
             lay.addStretch(1)
         self.refresh_admin()
         QTimer.singleShot(1500, self._fill_sensors)
+
+    # ---- смена тем ----
+    def _build_auto(self, lay: QVBoxLayout) -> None:
+        lay.addWidget(hint("Мини-экран может сам менять тему. Если правил несколько, главнее игра, потом ночь, "
+                           "потом «по очереди». Тему, выбранную вручную, программа показывает минуту, а потом "
+                           "возвращается к этим правилам."))
+        self.auto_now = label("", "muted")
+        self.auto_now.setWordWrap(True)
+        lay.addWidget(self.auto_now)
+        entries = theme_lib.list_themes()
+        names = {e.id: e.name + ("  ⟷" if e.landscape else "") for e in entries}
+
+        def theme_combo(cur: str) -> QComboBox:
+            cb = QComboBox()
+            for e in entries:
+                cb.addItem(names[e.id], e.id)
+            cb.setCurrentIndex(max(0, cb.findData(cur or self.s.theme)))
+            return cb
+
+        # по очереди
+        g = QGroupBox("Листать темы по очереди")
+        v = QVBoxLayout(g)
+        r = QHBoxLayout()
+        self.rot_cb = QCheckBox("Включить, менять каждые")
+        self.rot_cb.setChecked(self.s.rotate_enabled)
+        r.addWidget(self.rot_cb)
+        self.rot_sec = QSpinBox()
+        self.rot_sec.setRange(3, 3600)
+        self.rot_sec.setSuffix(" с")
+        self.rot_sec.setValue(int(self.s.rotate_seconds))
+        r.addWidget(self.rot_sec)
+        r.addStretch(1)
+        v.addLayout(r)
+        v.addWidget(hint("Отметьте хотя бы две темы, например: датчики → погода → часы. Порядок можно менять, "
+                         "перетаскивая строки. ⟷ — альбомная тема (экран повернётся)."))
+        self.rot_list = QListWidget()
+        self.rot_list.setDragDropMode(QListWidget.InternalMove)
+        self.rot_list.setMinimumHeight(220)
+        chosen = [t for t in self.s.rotate_themes if t in names]
+        for tid in chosen + [e.id for e in entries if e.id not in chosen]:
+            it = QListWidgetItem(names[tid])
+            it.setData(Qt.UserRole, tid)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
+            it.setCheckState(Qt.Checked if tid in chosen else Qt.Unchecked)
+            self.rot_list.addItem(it)
+        v.addWidget(self.rot_list)
+        lay.addWidget(g)
+
+        def save_rot(*_a) -> None:
+            self.s.rotate_enabled = self.rot_cb.isChecked()
+            self.s.rotate_seconds = int(self.rot_sec.value())
+            self.s.rotate_themes = [self.rot_list.item(i).data(Qt.UserRole) for i in range(self.rot_list.count())
+                                    if self.rot_list.item(i).checkState() == Qt.Checked]
+            self.s.save()
+            self._update_auto_now()
+        self.rot_cb.toggled.connect(save_rot)
+        self.rot_sec.valueChanged.connect(save_rot)
+        self.rot_list.itemChanged.connect(save_rot)
+        self.rot_list.model().rowsMoved.connect(save_rot)
+
+        # ночью
+        g = QGroupBox("Ночью — другая тема")
+        f = QFormLayout(g)
+        self.nt_cb = QCheckBox("Включить")
+        self.nt_cb.setChecked(self.s.night_theme_enabled)
+        f.addRow(self.nt_cb)
+        self.nt_theme = theme_combo(self.s.night_theme)
+        f.addRow("Тема", self.nt_theme)
+        tr = QHBoxLayout()
+        tr.addWidget(QLabel("с"))
+        self.nt_from = QTimeEdit(QTime.fromString(self.s.night_theme_from, "HH:mm"))
+        self.nt_from.setDisplayFormat("HH:mm")
+        tr.addWidget(self.nt_from)
+        tr.addWidget(QLabel("до"))
+        self.nt_to = QTimeEdit(QTime.fromString(self.s.night_theme_to, "HH:mm"))
+        self.nt_to.setDisplayFormat("HH:mm")
+        tr.addWidget(self.nt_to)
+        tr.addStretch(1)
+        f.addRow("Время", tr)
+        lay.addWidget(g)
+
+        def save_night(*_a) -> None:
+            self.s.night_theme_enabled = self.nt_cb.isChecked()
+            self.s.night_theme = self.nt_theme.currentData() or ""
+            self.s.night_theme_from = self.nt_from.time().toString("HH:mm")
+            self.s.night_theme_to = self.nt_to.time().toString("HH:mm")
+            self.s.save()
+            self._update_auto_now()
+        self.nt_cb.toggled.connect(save_night)
+        self.nt_theme.currentIndexChanged.connect(save_night)
+        self.nt_from.timeChanged.connect(save_night)
+        self.nt_to.timeChanged.connect(save_night)
+
+        # в игре
+        g = QGroupBox("Во время игры — другая тема")
+        f = QFormLayout(g)
+        self.gt_cb = QCheckBox("Включить (нужен включённый подсчёт FPS)")
+        self.gt_cb.setChecked(self.s.game_theme_enabled)
+        f.addRow(self.gt_cb)
+        self.gt_theme = theme_combo(self.s.game_theme)
+        f.addRow("Тема", self.gt_theme)
+        f.addRow(hint("Тема включается, когда игра идёт 3 секунды, и выключается через 10 секунд после выхода — "
+                      "если на миг свернуть игру, экран не будет мигать."))
+        lay.addWidget(g)
+
+        def save_game(*_a) -> None:
+            self.s.game_theme_enabled = self.gt_cb.isChecked()
+            self.s.game_theme = self.gt_theme.currentData() or ""
+            if self.s.game_theme_enabled and not self.s.fps_enabled:
+                self.fps_cb.setChecked(True)  # без FPS игру не определить
+            self.s.save()
+            self._update_auto_now()
+        self.gt_cb.toggled.connect(save_game)
+        self.gt_theme.currentIndexChanged.connect(save_game)
+
+        self._auto_timer = QTimer(self)
+        self._auto_timer.timeout.connect(self._update_auto_now)
+        self._auto_timer.start(2000)
+        self._update_auto_now()
+
+    def _update_auto_now(self) -> None:
+        if not self.isVisible() and hasattr(self, "_auto_shown"):
+            return
+        self._auto_shown = True
+        tid = self.engine.active_id
+        try:
+            name = theme_lib.load(tid).name
+        except Exception:  # noqa: BLE001
+            name = tid
+        why = {"игра": "идёт игра", "ночь": "ночное время", "по очереди": "листается по очереди",
+               "выбрана вручную": "выбрана вручную, автосмена — через минуту"}.get(self.engine.theme_reason, "")
+        self.auto_now.setText(f"Сейчас на экране: «{name}»" + (f" — {why}" if why else ""))
 
     # ---- вспомогательное ----
     def _set(self, attr: str, value, sys_opts: bool = False) -> None:

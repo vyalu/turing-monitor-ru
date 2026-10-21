@@ -26,6 +26,16 @@ class Settings:
     night_from: str = "23:00"
     night_to: str = "07:00"
     night_brightness: int = 15
+    # автоматическая смена тем (приоритет: игра → ночь → по очереди → выбранная тема)
+    rotate_enabled: bool = False         # листать несколько тем по очереди
+    rotate_themes: list[str] = field(default_factory=list)
+    rotate_seconds: int = 15
+    night_theme_enabled: bool = False    # ночью — другая тема
+    night_theme: str = ""
+    night_theme_from: str = "22:00"
+    night_theme_to: str = "07:00"
+    game_theme_enabled: bool = False     # во время игры — другая тема
+    game_theme: str = ""
     follow_monitor: bool = True          # гасить мини-экран, когда гаснут мониторы
     check_updates: bool = True
     fps_enabled: bool = True             # FPS в играх через PresentMon

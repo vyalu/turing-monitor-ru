@@ -88,7 +88,6 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
 
 
 SPIN_SPEED = 24.0   # градусов в секунду: медленно, чтобы шаг между кадрами был маленьким
-GLOW_PERIOD = 2.6   # секунд на один «вдох» подсветки
 
 
 class Renderer:
@@ -493,10 +492,10 @@ class Renderer:
         anim = values.get("media.anim") if values.get("media.playing") and values.get("media.title") else None
         now = _time.monotonic()
         angle = (now * SPIN_SPEED) % 360 if anim == "spin" else 0.0
-        glow = 0.5 + 0.5 * math.sin(now * 2 * math.pi / GLOW_PERIOD) if anim == "glow" else -1.0
+        eq = now if anim in ("eq", "glow") else -1.0  # «glow» — старое название, теперь эквалайзер
         draw_vinyl(img, (x, y), int(size), values.get("media.cover"), angle,
                    parse_color(w.get("color"), (17, 18, 22, 255)),
                    parse_color(w.get("groove"), (255, 255, 255, 20)),
                    parse_color(w.get("accent"), (79, 195, 247, 255)),
-                   num(w.get("label"), 46) / 100.0, bool(w.get("shine", True)), glow)
+                   num(w.get("label"), 46) / 100.0, bool(w.get("shine", True)), eq)
         return (x, y, x + size, y + size)

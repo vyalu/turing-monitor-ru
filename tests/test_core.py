@@ -448,3 +448,32 @@ def test_hub_samples_in_background_and_settings_migration(tmp_path):
     assert Settings.load(p).anim_fps == 12  # старое значение по умолчанию — плавнее
     p.write_text(json.dumps({"anim_fps": 8, "settings_rev": 1}), encoding="utf-8")
     assert Settings.load(p).anim_fps == 8   # выбранное вручную не трогаем
+
+
+def test_auto_theme_priorities(monkeypatch):
+    import time as _t
+
+    from turmon.config import Settings
+    from turmon.engine import Engine
+
+    e = Engine(Settings(theme="builtin:calm_grafit"))
+    s = e.settings
+    assert e.desired_theme({}, 100.0) == ("builtin:calm_grafit", "")
+    s.rotate_enabled, s.rotate_themes, s.rotate_seconds = True, ["builtin:neon", "builtin:glass", "нет:такой"], 10
+    monkeypatch.setattr(_t, "time", lambda: 1000.0)
+    a = e.desired_theme({}, 100.0)
+    monkeypatch.setattr(_t, "time", lambda: 1010.0)
+    b = e.desired_theme({}, 100.0)
+    assert {a[0], b[0]} == {"builtin:neon", "builtin:glass"} and a[1] == "по очереди"
+    s.night_theme_enabled, s.night_theme = True, "builtin:mono_nochnoj"
+    s.night_theme_from, s.night_theme_to = "00:00", "23:59"
+    assert e.desired_theme({}, 100.0) == ("builtin:mono_nochnoj", "ночь")
+    # игра: тема меняется, только если FPS держится 3 с, и возвращается через 10 с без FPS
+    s.game_theme_enabled, s.game_theme = True, "builtin:neon_kiber"
+    assert e.desired_theme({"fps.value": 120}, 200.0)[1] == "ночь"
+    assert e.desired_theme({"fps.value": 120}, 203.5) == ("builtin:neon_kiber", "игра")
+    assert e.desired_theme({}, 208.0)[1] == "игра"
+    assert e.desired_theme({}, 215.0)[1] == "ночь"
+    # ручной выбор держится минуту
+    e.set_theme("builtin:glass")
+    assert e.desired_theme({})[0] == "builtin:glass"

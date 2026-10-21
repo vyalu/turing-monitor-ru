@@ -56,6 +56,10 @@ def folder_of(theme_id: str) -> Path | None:
     return p if (p / "theme.json").exists() else None
 
 
+def exists(theme_id: str) -> bool:
+    return folder_of(theme_id) is not None
+
+
 def load(theme_id: str) -> Theme:
     folder = folder_of(theme_id)
     if folder is None:
