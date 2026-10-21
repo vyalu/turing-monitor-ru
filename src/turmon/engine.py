@@ -423,8 +423,14 @@ class Engine:
         return "main"
 
     def _player_animated(self, values: dict) -> bool:
-        """Пластинка больше не вращается — частые кадры для неё не нужны."""
-        return False
+        """Интервал кадров для анимации пластинки (0 — анимации нет)."""
+        anim = self.settings.vinyl_anim
+        if anim not in ("spin", "glow") or not values.get("media.playing"):
+            return 0.0
+        pg = self.renderer.page_data()
+        if not any(w.get("type") == "vinyl" and w.get("visible", True) for w in pg.get("widgets", [])):
+            return 0.0
+        return 1 / 20 if anim == "spin" else 1 / 10
 
     @property
     def page(self) -> str:
@@ -513,15 +519,19 @@ class Engine:
             smooth = self.settings.smooth
             values = self.smoother.values(t0) if smooth else raw
             busy = alert_busy
+            page, anim_every = "main", 0.0
             try:
                 page = self._player_page(values)
                 if renderer.page != page:
                     renderer.page = page
                     renderer._bg_key = None
                     self.sender.invalidate()
-                frame = renderer.render(values, history)
                 if page == "player":
-                    busy = busy or self._player_animated(values)
+                    anim_every = self._player_animated(values)
+                    if anim_every:
+                        values = dict(values)
+                        values["media.anim"] = self.settings.vinyl_anim
+                frame = renderer.render(values, history)
                 frame, anim = self._overlays(frame, values)
                 busy = busy or anim
             except Exception:  # noqa: BLE001
@@ -554,7 +564,9 @@ class Engine:
             wake_at = next_sample
             if smooth and not self.smoother.done(now):
                 wake_at = min(wake_at, t0 + 1.0 / max(1.0, float(self.settings.anim_fps)))
-            if busy:  # мигание рамки, плашка трека, вращение пластинки
+            if busy:  # мигание рамки, плашка трека
                 wake_at = min(wake_at, t0 + 0.25)
+            if page == "player" and anim_every:  # анимация пластинки: ровный темп кадров
+                wake_at = min(wake_at, t0 + anim_every)
             self._wake.wait(max(0.02, wake_at - now))
             self._wake.clear()

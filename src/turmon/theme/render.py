@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import functools
 import math
+import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,10 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
         return _load_image(str(path), path.stat().st_mtime, int(w), int(h), mode)
     except (OSError, ValueError):
         return None
+
+
+SPIN_SPEED = 24.0   # градусов в секунду: медленно, чтобы шаг между кадрами был маленьким
+GLOW_PERIOD = 2.6   # секунд на один «вдох» подсветки
 
 
 class Renderer:
@@ -484,10 +489,14 @@ class Renderer:
 
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
         size = num(w.get("size"), 220) * SS
-        angle = 0.0  # пластинка не вращается: по USB кадры идут рывками и вращение выглядело дёргано
+        # анимация включается в настройках («Музыка → Анимация пластинки») и только пока играет трек
+        anim = values.get("media.anim") if values.get("media.playing") and values.get("media.title") else None
+        now = _time.monotonic()
+        angle = (now * SPIN_SPEED) % 360 if anim == "spin" else 0.0
+        glow = 0.5 + 0.5 * math.sin(now * 2 * math.pi / GLOW_PERIOD) if anim == "glow" else -1.0
         draw_vinyl(img, (x, y), int(size), values.get("media.cover"), angle,
                    parse_color(w.get("color"), (17, 18, 22, 255)),
                    parse_color(w.get("groove"), (255, 255, 255, 20)),
                    parse_color(w.get("accent"), (79, 195, 247, 255)),
-                   num(w.get("label"), 46) / 100.0, bool(w.get("shine", True)))
+                   num(w.get("label"), 46) / 100.0, bool(w.get("shine", True)), glow)
         return (x, y, x + size, y + size)

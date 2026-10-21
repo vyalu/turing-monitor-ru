@@ -880,6 +880,19 @@ class SettingsPage(QWidget):
         pr.addWidget(self.p_game)
         pr.addStretch(1)
         f.addRow(pr)
+        vr = QHBoxLayout()
+        vr.addWidget(QLabel("Анимация пластинки"))
+        self.vinyl = QComboBox()
+        for key, text in (("none", "Без анимации"), ("spin", "Плавное вращение"),
+                          ("glow", "Подсветка — ободок мягко «дышит»")):
+            self.vinyl.addItem(text, key)
+        self.vinyl.setCurrentIndex(max(0, self.vinyl.findData(self.s.vinyl_anim)))
+        self.vinyl.setToolTip("Только пока трек играет. Анимация чаще обновляет мини-экран — "
+                              "на слабом USB-подключении выберите «Без анимации».")
+        self.vinyl.currentIndexChanged.connect(lambda: self._set("vinyl_anim", self.vinyl.currentData()))
+        vr.addWidget(self.vinyl)
+        vr.addStretch(1)
+        f.addRow(vr)
         mr = QHBoxLayout()
         self.media_lbl = label("", "muted")
         mr.addWidget(self.media_lbl, 1)

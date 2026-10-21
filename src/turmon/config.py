@@ -33,6 +33,7 @@ class Settings:
     player_mode: bool = True             # когда играет музыка — показывать страницу плеера темы
     player_delay: int = 5                # сколько секунд держать плеер после паузы
     player_in_game: bool = False         # показывать плеер и во время игры
+    vinyl_anim: str = "none"             # анимация пластинки: none / spin / glow
     alert_enabled: bool = True           # предупреждение о перегреве
     alert_cpu: int = 90
     alert_gpu: int = 85

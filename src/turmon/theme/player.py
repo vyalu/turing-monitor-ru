@@ -52,6 +52,19 @@ def _shine(size: int) -> Image.Image:
     return layer
 
 
+@functools.lru_cache(maxsize=4)
+def _ring(size: int, accent: Color) -> Image.Image:
+    """Мягкое кольцо по краю пластинки (для анимации «подсветка»)."""
+    mask = Image.new("L", (size, size), 0)
+    d = ImageDraw.Draw(mask)
+    w = max(2, size // 40)
+    d.ellipse((w, w, size - 1 - w, size - 1 - w), outline=230, width=w)
+    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.8))
+    layer = Image.new("RGBA", (size, size), (*accent[:3], 0))
+    layer.putalpha(mask)
+    return layer
+
+
 @functools.lru_cache(maxsize=16)
 def _label(path: str, mtime: float, size: int, accent: Color) -> Image.Image:
     """Круглая «этикетка» в центре: обложка трека или цветная метка с нотой."""
@@ -76,10 +89,17 @@ def _label(path: str, mtime: float, size: int, accent: Color) -> Image.Image:
 
 
 def draw_vinyl(img: Image.Image, pos: tuple[float, float], size: int, cover: Any, angle: float,
-               color: Color, groove: Color, accent: Color, label_k: float, shine: bool) -> None:
+               color: Color, groove: Color, accent: Color, label_k: float, shine: bool,
+               glow: float = -1.0) -> None:
     x, y = int(pos[0]), int(pos[1])
     size = max(8, int(size))
     img.paste(_disc(size, color, groove, accent), (x, y), _disc(size, color, groove, accent))
+    if glow >= 0:  # «дышащая» подсветка ободка в цвет темы
+        ring = _ring(size, accent)
+        a = ring.getchannel("A").point(lambda p, k=0.25 + 0.75 * glow: int(p * k))
+        layer = ring.copy()
+        layer.putalpha(a)
+        img.paste(layer, (x, y), layer)
     ls = max(4, int(size * label_k))
     path = str(cover or "")
     try:
