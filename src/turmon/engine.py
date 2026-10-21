@@ -423,12 +423,8 @@ class Engine:
         return "main"
 
     def _player_animated(self, values: dict) -> bool:
-        """Вращение пластинки — чаще обычного кадра."""
-        if not values.get("media.playing"):
-            return False
-        pg = self.renderer.page_data()
-        return any(w.get("type") == "vinyl" and w.get("rotate", True) and w.get("visible", True)
-                   for w in pg.get("widgets", []))
+        """Пластинка больше не вращается — частые кадры для неё не нужны."""
+        return False
 
     @property
     def page(self) -> str:

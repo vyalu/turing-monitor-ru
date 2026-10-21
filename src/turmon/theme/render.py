@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import functools
 import math
-import time
 from pathlib import Path
 from typing import Any
 
@@ -485,10 +484,7 @@ class Renderer:
 
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
         size = num(w.get("size"), 220) * SS
-        playing = bool(values.get("media.playing")) and bool(values.get("media.title"))
-        angle = 0.0
-        if w.get("rotate", True) and playing:
-            angle = (time.monotonic() * num(w.get("speed"), 40)) % 360
+        angle = 0.0  # пластинка не вращается: по USB кадры идут рывками и вращение выглядело дёргано
         draw_vinyl(img, (x, y), int(size), values.get("media.cover"), angle,
                    parse_color(w.get("color"), (17, 18, 22, 255)),
                    parse_color(w.get("groove"), (255, 255, 255, 20)),

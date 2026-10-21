@@ -130,8 +130,6 @@ WIDGETS: dict[str, dict[str, Any]] = {
         "label": "Пластинка",
         "fields": _POS + (
             Field("size", "Диаметр", "int", 220, lo=40, hi=1000),
-            Field("rotate", "Вращать, пока играет", "bool", True),
-            Field("speed", "Скорость, градусов в секунду", "float", 40.0, lo=1, hi=360),
             Field("label", "Размер обложки в центре, %", "int", 46, lo=10, hi=90),
             Field("color", "Цвет диска", "color", "#111216"),
             Field("groove", "Цвет дорожек", "color", "#FFFFFF14"),

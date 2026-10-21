@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QTimeEdit, QComboBox, QFileDialog, QFormLayout, QFrame,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QToolButton, QTabBar, QTimeEdit, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
                                QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QSpinBox, QStackedWidget, QSystemTrayIcon,
@@ -505,6 +505,74 @@ class HomePage(QWidget):
         self.status.setObjectName("status_ok" if self.engine.connected else "status_bad")
         self.status.style().unpolish(self.status)
         self.status.style().polish(self.status)
+
+
+def short_path(p: Path) -> str:
+    """Путь без имени пользователя: C:\\Users\\<имя>\\AppData\\Roaming\\… → %APPDATA%\\…"""
+    s = str(p)
+    for var in ("APPDATA", "LOCALAPPDATA", "USERPROFILE"):
+        base = os.environ.get(var)
+        if base and s.lower().startswith(base.lower().rstrip("\\/")):
+            return f"%{var}%" + s[len(base.rstrip("\\/")):]
+    return s
+
+
+class ExtensionDialog(QDialog):
+    """Пошаговая установка расширения: всё, что нужно ввести, копируется кнопкой."""
+
+    def __init__(self, parent: QWidget, folder: Path) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Установка расширения для браузера")
+        self.setMinimumWidth(620)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(10)
+        lay.addWidget(label("Расширение готово — осталось добавить его в браузер", "h2"))
+
+        def step(n: int, text: str, value: str | None = None, copy: str | None = None) -> None:
+            row = QHBoxLayout()
+            num = QLabel(str(n))
+            num.setFixedSize(24, 24)
+            num.setAlignment(Qt.AlignCenter)
+            num.setStyleSheet("background: #22272F; border-radius: 12px; font-weight: 500;")
+            row.addWidget(num, 0, Qt.AlignTop)
+            col = QVBoxLayout()
+            t = QLabel(text)
+            t.setWordWrap(True)
+            col.addWidget(t)
+            if value is not None:
+                vr = QHBoxLayout()
+                le = QLineEdit(value)
+                le.setReadOnly(True)
+                le.setCursorPosition(0)
+                vr.addWidget(le, 1)
+                b = QPushButton("Копировать")
+
+                def do_copy(_=False, b=b, txt=copy or value) -> None:
+                    QApplication.clipboard().setText(txt)
+                    b.setText("Скопировано ✓")
+                    QTimer.singleShot(1500, lambda: b.setText("Копировать"))
+                b.clicked.connect(do_copy)
+                vr.addWidget(b)
+                col.addLayout(vr)
+            row.addLayout(col, 1)
+            lay.addLayout(row)
+
+        step(1, "Откройте страницу расширений: скопируйте адрес и вставьте его в адресную строку браузера.",
+             "browser://extensions/")
+        lay.addWidget(hint("Для Chrome — chrome://extensions/, для Edge — edge://extensions/, для Opera — "
+                           "opera://extensions/."))
+        step(2, "Включите переключатель «Режим разработчика» (справа сверху).")
+        step(3, "Нажмите «Загрузить распакованное расширение» и вставьте путь к папке в поле «Папка» "
+                "(папка уже открыта в Проводнике):", short_path(folder), str(folder))
+        step(4, "Обновите вкладку с музыкой (F5) — трек появится на мини-экране.")
+        lay.addWidget(hint("Расширение работает только на этом ПК: трек передаётся программе по адресу 127.0.0.1."))
+        br = QHBoxLayout()
+        br.addStretch(1)
+        ok = QPushButton("Готово")
+        ok.setObjectName("primary")
+        ok.clicked.connect(self.accept)
+        br.addWidget(ok)
+        lay.addLayout(br)
 
 
 # ---------------------------------------------------------------- «Настройки»
@@ -1111,22 +1179,8 @@ class SettingsPage(QWidget):
         except OSError as e:
             QMessageBox.warning(self, "Расширение", f"Не удалось подготовить папку расширения: {e}")
             return
-        QApplication.clipboard().setText(str(d))
         winsys.open_path(d)
-        box = QMessageBox(self)
-        box.setWindowTitle("Установка расширения")
-        box.setIcon(QMessageBox.Information)
-        box.setTextFormat(Qt.RichText)
-        box.setText(
-            "<b>Расширение готово. Осталось добавить его в браузер:</b><ol>"
-            "<li>Откройте в адресной строке <b>browser://extensions</b> (Яндекс Браузер) "
-            "или <b>chrome://extensions</b> / <b>edge://extensions</b>.</li>"
-            "<li>Включите переключатель <b>«Режим разработчика»</b> (справа сверху).</li>"
-            "<li>Нажмите <b>«Загрузить распакованное расширение»</b> и выберите папку:<br>"
-            f"<code>{d}</code><br>(путь уже скопирован — вставьте его Ctrl+V; папка открыта в Проводнике).</li>"
-            "<li>Обновите вкладку с музыкой (F5) — трек появится на мини-экране.</li></ol>"
-            "Расширение работает только на этом ПК: трек передаётся программе по адресу 127.0.0.1.")
-        box.exec()
+        ExtensionDialog(self, d).exec()
 
     def _media_toggled(self, on: bool) -> None:
         self.engine.set_media_enabled(on)
