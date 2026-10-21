@@ -364,13 +364,18 @@ class Engine:
         from .paths import data_dir
         from .sensors.lhm import is_admin
 
+        from .sensors.browser_media import MediaMux
+
         if _os.name == "nt" and is_admin():
             from .sensors.media_helper import HelperMediaProvider
 
-            return HelperMediaProvider(data_dir())
-        from .sensors.media import MediaProvider
+            inner = HelperMediaProvider(data_dir())
+        else:
+            from .sensors.media import MediaProvider
 
-        return MediaProvider(data_dir() / "covers")
+            inner = MediaProvider(data_dir() / "covers")
+        # + расширение для браузеров, которые не сообщают Windows о треке (Яндекс Браузер)
+        return MediaMux(inner, data_dir() / "covers")
 
     def mark_ui_ready(self) -> None:
         self.ui_ready = True

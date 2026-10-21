@@ -336,3 +336,66 @@ def test_engine_switches_to_player_and_back(monkeypatch):
     assert e._player_page({**play, "fps.value": 144}) == "main"  # в игре — FPS важнее
     e.settings.player_mode = False
     assert e._player_page(play) == "main"
+
+
+def test_browser_bridge(tmp_path, monkeypatch):
+    import base64
+    import json
+    import urllib.request
+
+    import turmon.paths as tp
+    from turmon.sensors import browser_media as bm
+
+    monkeypatch.setattr(tp, "data_dir", lambda: tmp_path)
+    d, token = bm.install_extension()
+    assert (d / "manifest.json").exists() and token in (d / "config.js").read_text(encoding="utf-8")
+    assert bm.install_extension()[1] == token  # ключ не меняется при обновлении
+
+    class Dummy(bm.Provider):
+        available = True
+        ready = None
+
+        def start(self):
+            raise RuntimeError("нет winrt")
+
+        def update(self, v):
+            pass
+
+    mux = bm.MediaMux(Dummy(), tmp_path / "covers")
+    mux.start()
+    assert mux.available and mux.bridge is not None
+    port = mux.bridge.port
+
+    def post(body, origin="chrome-extension://abc"):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/media", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "text/plain", "Origin": origin})
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=5) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, None
+
+    png = "data:image/png;base64," + base64.b64encode(b"\x89PNG fake").decode()
+    track = {"title": "Песня", "artist": "Группа", "album": "", "art": "https://x/1.jpg", "playing": True,
+             "position": 30, "duration": 120, "site": "vk.com"}
+    assert post({"token": "плохой", "tab": 1, "data": track})[0] == 403
+    assert post({"token": token, "tab": 1, "data": track}, origin="https://evil.example")[0] == 403
+    code, res = post({"token": token, "tab": 1, "data": track, "cover": png})
+    assert code == 200 and res["have_cover"]
+    v = {}
+    mux.update(v)
+    assert v["media.title"] == "Песня" and v["media.app"] == "VK" and v["media.playing"] == 1
+    assert v["media.progress"] == 25 and v["media.position"] == "0:30" and Path(v["media.cover"]).exists()
+    assert mux.track_changed_at > 0
+    # пауза в другой вкладке не перебивает играющую
+    post({"token": token, "tab": 2, "data": dict(track, title="Другая", playing=False)})
+    v = {}
+    mux.update(v)
+    assert v["media.title"] == "Песня"
+    post({"token": token, "tab": 1, "data": None})
+    v = {}
+    mux.update(v)
+    assert v["media.title"] == "Другая" and v["media.playing"] == 0
+    assert "подключено" in mux.extension_status()
+    mux.stop()

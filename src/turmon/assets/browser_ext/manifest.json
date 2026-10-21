@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Turing Monitor RU — музыка из браузера",
+  "short_name": "Turing Monitor RU",
+  "version": "1.0.0",
+  "description": "Передаёт программе Turing Monitor RU на этом ПК, какой трек играет в браузере (VK, Яндекс Музыка, YouTube и другие сайты). Данные никуда, кроме вашего компьютера, не отправляются.",
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "host_permissions": ["http://127.0.0.1/*", "<all_urls>"],
+  "icons": { "128": "icon128.png" }
+}

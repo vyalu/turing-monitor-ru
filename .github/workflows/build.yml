@@ -129,6 +129,14 @@ jobs:
           $log = (Get-Content "$env:APPDATA/TuringMonitorRU/turmon.log" -ErrorAction SilentlyContinue) -join "%0A"
           if ($p.HasExited) { Write-Output "::error title=exe::код $($p.ExitCode)%0A$log"; exit 1 }
           Write-Output "::notice title=exe log::$log"
+          $ext = "$env:APPDATA/TuringMonitorRU/browser_extension"
+          if (-not (Test-Path "$ext/manifest.json")) { Write-Output "::error title=browser ext::нет папки расширения"; exit 1 }
+          $tok = [regex]::Match((Get-Content "$ext/config.js" -Raw), 'token: "([0-9a-f]+)"').Groups[1].Value
+          $body = @{ token = $tok; tab = 1; data = @{ title = "Проверка"; artist = "CI"; playing = $true; position = 5; duration = 50; site = "vk.com" } } | ConvertTo-Json -Depth 4
+          try {
+            $r = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:47863/media" -Body ([Text.Encoding]::UTF8.GetBytes($body)) -ContentType "text/plain" -Headers @{ Origin = "chrome-extension://ci" }
+            Write-Output "::notice title=browser ext::приёмник ответил: $($r | ConvertTo-Json -Compress)"
+          } catch { Write-Output "::error title=browser ext::$_"; exit 1 }
           Stop-Process -Id $p.Id -Force
 
       - uses: actions/upload-artifact@v4

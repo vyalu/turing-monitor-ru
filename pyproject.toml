@@ -1,6 +1,6 @@
 [project]
 name = "turing-monitor-ru"
-version = "1.4.1"
+version = "1.5.0"
 description = "Свободная программа для мини-экранов Turing Smart Screen 3.5\" с русским интерфейсом"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,7 +33,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-turmon = ["assets/*", "assets/fonts/*"]
+turmon = ["assets/*", "assets/fonts/*", "assets/browser_ext/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -822,7 +822,24 @@ class SettingsPage(QWidget):
         f.addRow(mr)
         self.media_lbl.setWordWrap(True)
         sec["music"].addWidget(hint("Трек и обложка берутся из Windows — оттуда же, где карточка музыки "
-                                    "у громкости. Если трек виден там, программа его тоже увидит."))
+                                    "у громкости, а из Яндекс Браузера — через наше расширение (ниже)."))
+        sec["music"].addWidget(g)
+
+        g = QGroupBox("Музыка из браузера")
+        bv = QVBoxLayout(g)
+        bv.addWidget(hint("Яндекс Браузер и некоторые другие не сообщают Windows, какой трек играет. Для них есть "
+                          "наше расширение: оно передаёт трек, обложку и прогресс с VK, Яндекс Музыки, YouTube "
+                          "и других сайтов прямо в программу на этом ПК — в интернет ничего не уходит. "
+                          "Устанавливается один раз."))
+        brow = QHBoxLayout()
+        b_ext = QPushButton("Установить расширение…")
+        b_ext.setObjectName("primary")
+        b_ext.clicked.connect(self._install_ext)
+        brow.addWidget(b_ext)
+        self.ext_lbl = label("", "muted")
+        self.ext_lbl.setWordWrap(True)
+        brow.addWidget(self.ext_lbl, 1)
+        bv.addLayout(brow)
         sec["music"].addWidget(g)
 
         g = QGroupBox("Перегрев")
@@ -1081,10 +1098,35 @@ class SettingsPage(QWidget):
             QApplication.restoreOverrideCursor()
         text = "\n".join("• " + x for x in lines)
         QMessageBox.information(
-            self, "Плееры, которые видит Windows",
-            text + "\n\nЕсли вашего плеера нет в списке, он не сообщает Windows о треке. "
-            "Проверьте, виден ли трек в панели громкости Windows (Win+A). В браузере должно быть включено "
-            "«управление мультимедиа» (по умолчанию включено).")
+            self, "Плееры, которые видит программа",
+            text + "\n\nЕсли вашего плеера нет в списке, он не сообщает Windows о треке (его нет и в карточке "
+            "музыки у громкости). Для браузеров — например, Яндекс Браузера — установите наше расширение: "
+            "«Настройки → Музыка → Установить расширение».")
+
+    def _install_ext(self) -> None:
+        from ..sensors.browser_media import install_extension
+
+        try:
+            d, _ = install_extension()
+        except OSError as e:
+            QMessageBox.warning(self, "Расширение", f"Не удалось подготовить папку расширения: {e}")
+            return
+        QApplication.clipboard().setText(str(d))
+        winsys.open_path(d)
+        box = QMessageBox(self)
+        box.setWindowTitle("Установка расширения")
+        box.setIcon(QMessageBox.Information)
+        box.setTextFormat(Qt.RichText)
+        box.setText(
+            "<b>Расширение готово. Осталось добавить его в браузер:</b><ol>"
+            "<li>Откройте в адресной строке <b>browser://extensions</b> (Яндекс Браузер) "
+            "или <b>chrome://extensions</b> / <b>edge://extensions</b>.</li>"
+            "<li>Включите переключатель <b>«Режим разработчика»</b> (справа сверху).</li>"
+            "<li>Нажмите <b>«Загрузить распакованное расширение»</b> и выберите папку:<br>"
+            f"<code>{d}</code><br>(путь уже скопирован — вставьте его Ctrl+V; папка открыта в Проводнике).</li>"
+            "<li>Обновите вкладку с музыкой (F5) — трек появится на мини-экране.</li></ol>"
+            "Расширение работает только на этом ПК: трек передаётся программе по адресу 127.0.0.1.")
+        box.exec()
 
     def _media_toggled(self, on: bool) -> None:
         self.engine.set_media_enabled(on)
@@ -1114,6 +1156,9 @@ class SettingsPage(QWidget):
         else:
             text = "ничего не играет"
         self.media_lbl.setText(text)
+        ext = getattr(m, "extension_status", None) if m is not None else None
+        self.ext_lbl.setText(("Расширение: " + ext()) if ext else
+                             ("Расширение: включите «Сейчас играет»" if not self.s.media_enabled else ""))
 
     def refresh_fps(self) -> None:
         p = self.engine.fps
