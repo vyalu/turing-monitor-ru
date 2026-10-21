@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Callable
@@ -67,7 +68,6 @@ class Engine:
         from .theme.smooth import Smoother
 
         self.smoother = Smoother()
-        self._force_sample = False
         from .overlay import OverheatWatch
 
         self.overheat = OverheatWatch()
@@ -81,12 +81,23 @@ class Engine:
         self.system = SystemProvider(s.net_iface, s.disk)
         self.hub.add(self.system)
         self.lhm = LhmProvider(s.sensor_overrides, s.disk_index)
-        self.hub.add(self.lhm)
-        if self.lhm.available:
+        # LibreHardwareMonitor открывается секунду-другую (опрос дисков, видеокарты) — в фоне,
+        # чтобы окно и мини-экран появлялись сразу; датчики CPU/GPU подключатся чуть позже
+        lhm = self.lhm
+        lhm.available = False
+        lhm.status = "запускается…"
+        self.hub.providers.append(lhm)
+
+        def open_lhm() -> None:
             try:
-                log.info("LibreHardwareMonitor: датчиков %d. %s", len(self.lhm.sensors()), self.lhm.status)
+                lhm.start()
+                log.info("LibreHardwareMonitor: датчиков %d. %s", len(lhm.sensors()), lhm.status)
             except Exception as e:  # noqa: BLE001
-                log.warning("LibreHardwareMonitor: %s", e)
+                lhm.available = False
+                lhm.status = str(e)
+                log.warning("Источник %s недоступен: %s", lhm.name, e)
+            self.hub.request_now()
+        threading.Thread(target=open_lhm, name="lhm-open", daemon=True).start()
         self.hub.add(VolumeProvider())
         if s.fps_enabled:
             from .sensors.fps import FpsProvider
@@ -108,6 +119,7 @@ class Engine:
                 pass
         self.weather = WeatherProvider(s.lat, s.lon, s.city, s.weather_auto, cached, located)
         self.hub.add(self.weather)
+        self.hub.start_sampling(lambda: max(0.5, float(self.theme.refresh or 1.0)), self._wake.set)
         self._thread = threading.Thread(target=self._run, name="engine", daemon=True)
         self._thread.start()
 
@@ -252,7 +264,9 @@ class Engine:
             self.renderer = Renderer(theme, self.scale_for(theme))
             # в предпросмотре из редактора показываем все элементы, иначе — без скрытых блоков
             self._update_hidden(not isinstance(theme_id, Theme))
-            self.sender.invalidate()
+            if not isinstance(theme_id, Theme) or orient_changed:
+                # правка в редакторе меняет пару элементов — их и отправим, без полной перерисовки экрана
+                self.sender.invalidate()
             if orient_changed:
                 self._need_setup = True
         self._wake.set()
@@ -546,7 +560,7 @@ class Engine:
             self._set_status(str(e))
 
     def _run(self) -> None:
-        next_sample = 0.0
+        seen = -1
         raw: dict = {}
         history: dict = {}
         alert_busy = False
@@ -554,14 +568,11 @@ class Engine:
             t0 = time.monotonic()
             with self._lock:
                 theme, renderer = self.theme, self.renderer
-            sample_period = max(0.5, float(theme.refresh or 1.0))
-            if t0 >= next_sample or self._force_sample:
-                self._force_sample = False
-                self.hub.update()
+            if self.hub.version != seen:  # датчики опрашиваются в своём потоке — здесь только новые данные
+                seen = self.hub.version
                 raw, history = self.hub.snapshot()
                 alert_busy = self._watch_alerts(raw)
                 self.smoother.set_target(raw, t0)
-                next_sample = t0 + sample_period
             smooth = self.settings.smooth
             values = self.smoother.values(t0) if smooth else raw
             busy = alert_busy
@@ -612,12 +623,30 @@ class Engine:
 
             # следующий кадр: во время плавного перехода и анимаций — чаще, иначе ждём новых данных
             now = time.monotonic()
-            wake_at = next_sample
+            wake_at = t0 + 1.0  # новый замер датчиков сам разбудит цикл
             if smooth and not self.smoother.done(now):
                 wake_at = min(wake_at, t0 + 1.0 / max(1.0, float(self.settings.anim_fps)))
             if busy:  # мигание рамки, плашка трека
                 wake_at = min(wake_at, t0 + 0.25)
             if page == "player" and anim_every:  # анимация пластинки: ровный темп кадров
                 wake_at = min(wake_at, t0 + anim_every)
-            self._wake.wait(max(0.02, wake_at - now))
+            self._precise_timer(wake_at - t0 < 0.15)
+            self._wake.wait(max(0.01, wake_at - now))
             self._wake.clear()
+        self._precise_timer(False)
+
+    _timer_on = False
+
+    def _precise_timer(self, on: bool) -> None:
+        """Во время анимации — точный системный таймер Windows (1 мс вместо 15,6 мс), иначе кадры
+        приходят неровно. Включается только на время анимации, чтобы не тратить заряд."""
+        if os.name != "nt" or on == self._timer_on:
+            return
+        try:
+            import ctypes
+
+            winmm = ctypes.WinDLL("winmm")
+            (winmm.timeBeginPeriod if on else winmm.timeEndPeriod)(1)
+            self._timer_on = on
+        except (OSError, AttributeError):
+            pass

@@ -240,29 +240,36 @@ class HomePage(QWidget):
     }
 
     def reload_gallery(self) -> None:
-        """Перерисовать миниатюры всех тем и показать текущий раздел."""
-        # миниатюры — в обычном виде, без игровых и «музыкальных» вставок
-        vals = {k: v for k, v in sample_values().items() if not k.startswith(("fps.", "media.", "alert."))}
+        """Показать миниатюры всех тем. Готовые берутся из кэша на диске, недостающие рисуются
+        понемногу в фоне — окно открывается сразу, а не через пару секунд."""
         self._thumbs = []
         cache = getattr(self, "_thumb_cache", {})
         new_cache = {}
+        self._thumb_queue: list = []
         for e in theme_lib.list_themes():
             try:
                 t = theme_lib.load(e.id)
                 scale = self.engine.scale_for(t)
                 key = (e.id, (e.folder / "theme.json").stat().st_mtime, scale)
-                icon = cache.get(key)
-                if icon is None:
-                    img = Renderer(t, scale).render(vals)
-                    pm = pil_to_pixmap(img, THUMB / max(img.size))
-                    icon = QIcon()
-                    icon.addPixmap(pm, QIcon.Normal)
-                    icon.addPixmap(pm, QIcon.Selected)  # без синей заливки поверх кадра выбранной темы
             except Exception:  # noqa: BLE001
                 continue
-            new_cache[key] = icon
+            icon = cache.get(key)
+            if icon is None:
+                icon = self._thumb_from_disk(key)
+            if icon is None:
+                icon = self._placeholder(e.landscape)
+                self._thumb_queue.append((key, e, t, scale))
+            else:
+                new_cache[key] = icon
             self._thumbs.append((e, icon))
         self._thumb_cache = new_cache
+        self._thumb_files = {self._thumb_path(k[0]).name for k in
+                             [(x,) for x in list(new_cache) + [q[0] for q in self._thumb_queue]]}
+        if self._thumb_queue and not getattr(self, "_thumb_timer", None):
+            self._thumb_timer = QTimer(self)
+            self._thumb_timer.timeout.connect(self._render_some_thumbs)
+        if self._thumb_queue:
+            self._thumb_timer.start(0)
         counts = {key: sum(1 for e, _ in self._thumbs if e.section == key) for key in self.SECTION_KEYS}
         for i, (key, name) in enumerate(zip(self.SECTION_KEYS, self.SECTION_NAMES)):
             self.sections.setTabText(i, f"{name}  {counts[key]}")
@@ -274,6 +281,82 @@ class HomePage(QWidget):
             self.sections.blockSignals(False)
         self._follow_current = False
         self._fill_gallery()
+
+    # ---- миниатюры ----
+    @staticmethod
+    def _thumb_path(key) -> Path:
+        import hashlib
+
+        from ..paths import data_dir
+
+        h = hashlib.sha1(repr((key, __version__)).encode("utf-8")).hexdigest()[:20]
+        return data_dir() / "thumbs" / f"{h}.png"
+
+    def _thumb_from_disk(self, key):
+        p = self._thumb_path(key)
+        if not p.exists():
+            return None
+        from PySide6.QtGui import QPixmap
+
+        pm = QPixmap(str(p))
+        if pm.isNull():
+            return None
+        icon = QIcon()
+        icon.addPixmap(pm, QIcon.Normal)
+        icon.addPixmap(pm, QIcon.Selected)  # без синей заливки поверх кадра выбранной темы
+        return icon
+
+    def _placeholder(self, landscape: bool):
+        from PySide6.QtGui import QColor, QPixmap
+
+        w, h = (THUMB, THUMB * 2 // 3) if landscape else (THUMB * 2 // 3, THUMB)
+        pm = QPixmap(w, h)
+        pm.fill(QColor("#0B0D10"))
+        return QIcon(pm)
+
+    def _render_some_thumbs(self) -> None:
+        """Нарисовать пару миниатюр за раз, не подвешивая окно."""
+        import time as _t
+
+        vals = getattr(self, "_thumb_vals", None)
+        if vals is None:  # миниатюры — в обычном виде, без игровых и «музыкальных» вставок
+            vals = self._thumb_vals = {k: v for k, v in sample_values().items()
+                                       if not k.startswith(("fps.", "media.", "alert."))}
+        t_end = _t.monotonic() + 0.03
+        changed = False
+        while self._thumb_queue and _t.monotonic() < t_end:
+            key, e, t, scale = self._thumb_queue.pop(0)
+            try:
+                img = Renderer(t, scale).render(vals)
+            except Exception:  # noqa: BLE001
+                continue
+            pm = pil_to_pixmap(img, THUMB / max(img.size))
+            try:
+                p = self._thumb_path(key)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                pm.save(str(p), "PNG")
+            except OSError:
+                pass
+            icon = QIcon()
+            icon.addPixmap(pm, QIcon.Normal)
+            icon.addPixmap(pm, QIcon.Selected)
+            self._thumb_cache[key] = icon
+            self._thumbs = [(x, icon if x.id == e.id else ic) for x, ic in self._thumbs]
+            for i in range(self.gallery.count()):
+                it = self.gallery.item(i)
+                if it.data(Qt.UserRole) == e.id:
+                    it.setIcon(icon)
+            changed = True
+        if not self._thumb_queue:
+            self._thumb_timer.stop()
+            # старые миниатюры (тема изменена или удалена) — с диска
+            try:
+                for f in self._thumb_path(("",)).parent.glob("*.png"):
+                    if f.name not in self._thumb_files:
+                        f.unlink()
+            except OSError:
+                pass
+        _ = changed
 
     def show_section(self, key: str) -> None:
         self.sections.setCurrentIndex(self.SECTION_KEYS.index(key))
@@ -731,7 +814,8 @@ class SettingsPage(QWidget):
         self.smooth_cb.toggled.connect(lambda on: (self._set("smooth", on), self.anim.setEnabled(on)))
         sm.addWidget(self.smooth_cb)
         self.anim = QComboBox()
-        for v, t in ((5, "5 кадров/с — меньше нагрузка"), (8, "8 кадров/с"), (12, "12 кадров/с — плавнее")):
+        for v, t in ((6, "6 кадров/с — меньше нагрузка"), (12, "12 кадров/с"),
+                     (20, "20 кадров/с — очень плавно")):
             self.anim.addItem(t, v)
         self.anim.setCurrentIndex(max(0, self.anim.findData(self.s.anim_fps)))
         self.anim.currentIndexChanged.connect(lambda: self._set("anim_fps", self.anim.currentData()))
@@ -1179,7 +1263,8 @@ class SettingsPage(QWidget):
 
     def _fill_sensors(self) -> None:
         lhm = self.engine.lhm
-        sensors = lhm.sensors() if lhm and lhm.available else []
+        # последний замер из потока датчиков: опрос железа в окне подвешивал бы интерфейс
+        sensors = (lhm.last_sensors or lhm.sensors()) if lhm and lhm.available else []
         for key, cb in self.overrides.items():
             cb.blockSignals(True)
             cb.clear()
@@ -1307,6 +1392,9 @@ class SettingsPage(QWidget):
         lhm = self.engine.lhm
         if os.name != "nt":
             text = "Расширенные датчики доступны только в Windows."
+        elif lhm is not None and not lhm.available and lhm.status == "запускается…":
+            text = "LibreHardwareMonitor запускается…"
+            QTimer.singleShot(2000, self.refresh_admin)
         elif lhm is None or not lhm.available:
             text = f"LibreHardwareMonitor не загрузился: {lhm.status if lhm else ''}"
         elif is_admin():
@@ -1554,7 +1642,8 @@ class MainWindow(QMainWindow):
         """Показать плашку, если датчики CPU есть, а температуры нет и нет драйвера."""
         lhm = self.engine.lhm
         show = False
-        if os.name == "nt" and lhm is not None and lhm.available and "cpu.temp" not in self.engine.hub.values:
+        if (os.name == "nt" and lhm is not None and lhm.available and lhm.last_sensors
+                and "cpu.temp" not in self.engine.hub.values):
             from ..sensors import pawnio
 
             show = not pawnio.is_installed()

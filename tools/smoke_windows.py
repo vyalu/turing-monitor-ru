@@ -59,7 +59,6 @@ def main() -> int:
     except Exception as e:  # noqa: BLE001
         annotate("warning", "weather", f"погода не получена: {e}")
     try:
-        import tempfile
 
         from turmon.sensors.media import MediaProvider
 

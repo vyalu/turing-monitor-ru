@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPen, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
                                QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
@@ -597,6 +597,9 @@ class EditorPage(QWidget):
         self._pending = QTimer(self)
         self._pending.setSingleShot(True)
         self._pending.timeout.connect(self._render)
+        self._cast = QTimer(self)
+        self._cast.setSingleShot(True)
+        self._cast.timeout.connect(self._cast_now)
 
     # ---------- загрузка ----------
     def open_theme(self, theme_id: str) -> None:
@@ -860,6 +863,10 @@ class EditorPage(QWidget):
         self._update_title()
         self._render_soon()
         if self.cb_cast.isChecked():
+            self._cast.start(120)  # не чаще ~8 раз в секунду, пока крутят ползунок или печатают
+
+    def _cast_now(self) -> None:
+        if self.cb_cast.isChecked() and self.theme is not None:
             self.engine.preview_theme(self.theme.copy())
 
     # ---------- действия ----------

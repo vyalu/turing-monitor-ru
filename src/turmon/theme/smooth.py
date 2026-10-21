@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-DURATION = 0.45  # секунд на переход
+DURATION = 0.6  # секунд на переход: заметно плавнее, но успевает до следующего замера
 SKIP_PREFIX = ("time.", "date.", "alert.", "media.playing", "sys.uptime", "cpu.cores", "sys.processes")
 
 

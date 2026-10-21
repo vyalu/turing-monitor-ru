@@ -20,7 +20,8 @@ class Settings:
     chunk: int = 0                       # размер пакета записи (0 = авто)
     fps_limit: float = 2.0               # (устарело) раньше — кадров в секунду
     smooth: bool = True                  # плавные переходы значений
-    anim_fps: int = 8                    # кадров в секунду во время перехода
+    anim_fps: int = 12                   # кадров в секунду во время перехода
+    settings_rev: int = 1                # версия формата настроек (для переноса старых значений)
     night_enabled: bool = False          # ночная яркость по расписанию
     night_from: str = "23:00"
     night_to: str = "07:00"
@@ -82,6 +83,11 @@ class Settings:
         for k, v in data.items():
             if k in names:
                 setattr(s, k, v)
+        if int(data.get("settings_rev", 0)) < 1:
+            # до 1.8: по умолчанию было 8 кадров/с — теперь плавнее
+            if s.anim_fps == 8:
+                s.anim_fps = 12
+            s.settings_rev = 1
         return s
 
     def save(self, path: Path | None = None) -> None:

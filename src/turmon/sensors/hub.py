@@ -38,6 +38,47 @@ class SensorHub:
         self.history: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
         self.custom: dict[str, str] = {}
+        self.version = 0  # растёт с каждым новым замером
+        self._sampler: threading.Thread | None = None
+        self._sample_now = threading.Event()
+        self._sampling_stop = threading.Event()
+        self.last_update_ms = 0.0
+
+    def start_sampling(self, period: Callable[[], float], on_sample: Callable[[], None] | None = None) -> None:
+        """Опрашивать датчики в отдельном потоке.
+
+        LibreHardwareMonitor на некоторых ПК отвечает десятки и сотни миллисекунд; если опрашивать его
+        в потоке отрисовки, анимации и плавные переходы раз в секунду подтормаживают.
+        """
+        def run() -> None:
+            while not self._sampling_stop.is_set():
+                t0 = time.monotonic()
+                try:
+                    self.update()
+                except Exception:  # noqa: BLE001
+                    log.exception("Опрос датчиков")
+                self.last_update_ms = (time.monotonic() - t0) * 1000
+                self.version += 1
+                if on_sample is not None:
+                    on_sample()
+                try:
+                    p = max(0.25, float(period()))
+                except Exception:  # noqa: BLE001
+                    p = 1.0
+                delay = p - (time.monotonic() - t0)
+                if abs(p - round(p)) < 0.01:
+                    # раз в целое число секунд — попадаем ровно в начало секунды: часы с секундами
+                    # не «перепрыгивают» и не задерживаются
+                    now = time.time()
+                    delay = max(0.05, round(p) - (now % 1.0) + 0.005 if p >= 1 else delay)
+                self._sample_now.wait(max(0.05, delay))
+                self._sample_now.clear()
+
+        self._sampler = threading.Thread(target=run, name="sensors", daemon=True)
+        self._sampler.start()
+
+    def request_now(self) -> None:
+        self._sample_now.set()
 
     def add(self, provider: Provider) -> None:
         try:
@@ -49,7 +90,9 @@ class SensorHub:
         self.providers.append(provider)
 
     def stop(self) -> None:
-        for p in self.providers:
+        self._sampling_stop.set()
+        self._sample_now.set()
+        for p in list(self.providers):
             try:
                 p.stop()
             except Exception:  # noqa: BLE001
@@ -57,7 +100,7 @@ class SensorHub:
 
     def update(self) -> Values:
         new: Values = {}
-        for p in self.providers:
+        for p in list(self.providers):  # список может меняться из интерфейса (вкл./выкл. FPS)
             if not p.available:
                 continue
             try:

@@ -417,3 +417,34 @@ def test_theme_blocks_hide():
     r = Renderer(t)
     r.render(sample_values(), {}, skip=skip)
     assert not (skip & set(r.bboxes)) and "net.down" not in {names[i] for i in r.bboxes}
+
+
+def test_hub_samples_in_background_and_settings_migration(tmp_path):
+    import json
+    import time
+
+    from turmon.config import Settings
+    from turmon.sensors.hub import Provider, SensorHub
+
+    class Slow(Provider):
+        name = "slow"
+
+        def update(self, v):
+            time.sleep(0.05)
+            v["cpu.load"] = 1.0
+
+    hub = SensorHub()
+    hub.add(Slow())
+    woke = []
+    hub.start_sampling(lambda: 0.3, lambda: woke.append(1))
+    time.sleep(0.5)
+    hub.request_now()
+    time.sleep(0.2)
+    hub.stop()
+    assert hub.version >= 2 and woke and hub.snapshot()[0]["cpu.load"] == 1.0
+
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({"anim_fps": 8}), encoding="utf-8")
+    assert Settings.load(p).anim_fps == 12  # старое значение по умолчанию — плавнее
+    p.write_text(json.dumps({"anim_fps": 8, "settings_rev": 1}), encoding="utf-8")
+    assert Settings.load(p).anim_fps == 8   # выбранное вручную не трогаем

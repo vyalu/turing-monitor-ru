@@ -67,6 +67,7 @@ class LhmProvider(Provider):
         self._ST = None
         self._lock = threading.Lock()
         self.gpu_name = ""
+        self.last_sensors: list[SensorInfo] = []  # последний замер — для интерфейса, без нового опроса
 
     def start(self) -> None:
         if os.name != "nt":
@@ -116,7 +117,8 @@ class LhmProvider(Provider):
 
     def cpu_temp_missing(self) -> bool:
         """Датчики температуры CPU есть, но значений нет — нужен драйвер PawnIO."""
-        temps = [s for s in self.sensors() if s.hw_type == "Cpu" and s.kind == "Temperature"]
+        temps = [s for s in (self.last_sensors or self.sensors())
+                 if s.hw_type == "Cpu" and s.kind == "Temperature"]
         return not temps or all(not s.value for s in temps)
 
     def stop(self) -> None:
@@ -154,6 +156,7 @@ class LhmProvider(Provider):
         if self._computer is None:
             return
         all_s = self.sensors()
+        self.last_sensors = all_s
         by_id = {s.ident: s for s in all_s}
 
         def pick(hw_types, kind, names=None, contains=None):
