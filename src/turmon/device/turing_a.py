@@ -106,6 +106,13 @@ class TuringRevA(Display):
             raise DisplayError(f"Не удалось открыть {port}: {e}. "
                                "Возможно, порт занят другой программой (закройте TURZX).") from e
         self.port = port
+        # дать контроллеру экрана «проснуться» и выбросить мусор, оставшийся в буферах порта
+        time.sleep(0.2)
+        try:
+            self._ser.reset_input_buffer()
+            self._ser.reset_output_buffer()
+        except Exception:  # noqa: BLE001
+            pass
         log.info("Экран открыт на %s", port)
 
     def close(self) -> None:

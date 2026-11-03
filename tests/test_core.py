@@ -477,3 +477,19 @@ def test_auto_theme_priorities(monkeypatch):
     # ручной выбор держится минуту
     e.set_theme("builtin:glass")
     assert e.desired_theme({})[0] == "builtin:glass"
+
+
+def test_screen_reinit_once_after_start():
+    import time as _t
+
+    from turmon.config import Settings
+    from turmon.engine import Engine
+
+    e = Engine(Settings())
+    e._settled = True
+    e._reinit_at = _t.monotonic() - 1
+    old = e.display
+    e._check_reinit()
+    assert e.display is not old and e._need_setup and e._reinit_at == 0.0
+    e._check_reinit()  # второй раз — ничего
+    assert e._reinit_at == 0.0

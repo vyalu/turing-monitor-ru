@@ -36,6 +36,8 @@ class Engine:
         self.theme: Theme = theme_lib.load(settings.theme)
         self.renderer = Renderer(self.theme, self.scale_for(self.theme))
         self._blocks_cache: tuple[int, list] | None = None
+        self._settled = False   # была ли уже повторная инициализация после запуска/сна
+        self._reinit_at = 0.0
         self.active_id = settings.theme   # тема на экране (может отличаться от выбранной — автосмена)
         self.theme_reason = ""
         self._previewing = False
@@ -186,6 +188,7 @@ class Engine:
         with self._lock:
             self._sleeping = False
             self._need_setup = True
+            self._settled = False  # после сна — снова с повторной инициализацией
             self._next_connect = time.monotonic() + 2  # USB после сна поднимается не сразу
         self._wake.set()
         log.info("Пробуждение: переподключение к экрану")
@@ -445,6 +448,20 @@ class Engine:
         self.paused = paused
         self._apply_blank()
 
+    REINIT_AFTER = 4.0
+
+    def _check_reinit(self) -> None:
+        """Под замком: повторная инициализация экрана после первого подключения."""
+        if self._reinit_at and time.monotonic() >= self._reinit_at and not self.blank:
+            self._reinit_at = 0.0
+            log.info("Повторная инициализация экрана (после запуска или сна)")
+            self.display.close()
+            self.display = TuringRevA(self.settings.port, self.settings.chunk)
+            self.sender = FrameSender(self.display)
+            self.connected = False
+            self._need_setup = True
+            self._next_connect = time.monotonic() + 0.5
+
     def reconnect(self, port: str | None = None) -> None:
         with self._lock:
             if port is not None:
@@ -644,6 +661,12 @@ class Engine:
             self.sender.invalidate()
             self._need_setup = False
             self.connected = True
+            if not self._settled:
+                # сразу после включения ПК (или сна) экран иногда «не слышит» первые команды и остаётся
+                # тёмным, хотя порт открыт. Через несколько секунд переподключаемся ещё раз сами —
+                # то же, что кнопка «Переподключить»
+                self._settled = True
+                self._reinit_at = time.monotonic() + self.REINIT_AFTER
             self._set_status(f"Подключено: {getattr(d, 'port', '') or 'экран'}")
             if self.blank:
                 d.screen_off()
@@ -704,6 +727,7 @@ class Engine:
                     pass
 
             with self._lock:
+                self._check_reinit()
                 self._ensure_connected()
                 if self.connected and not self.blank:
                     self._apply_brightness()  # ночной режим включается/выключается сам
