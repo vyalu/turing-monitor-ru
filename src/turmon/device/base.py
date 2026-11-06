@@ -154,6 +154,7 @@ class FrameSender:
 
     def __init__(self, display: Display) -> None:
         self.display = display
+        self.abort = None  # функция: True — прервать отправку кадра между прямоугольниками
         self._last: np.ndarray | None = None
         self.full_refresh_every = 0  # 0 = никогда
 
@@ -167,6 +168,10 @@ class FrameSender:
         rects = dirty_rects(self._last, cur)
         sent = 0
         for r in rects:
+            if self.abort is not None and self.abort():
+                # выключение Windows: дальше не шлём, чтобы экран быстрее получил «выключить»
+                self.invalidate()
+                return sent
             self.display.draw(frame.crop((r.x, r.y, r.x + r.w, r.y + r.h)), r.x, r.y)
             sent += r.area
         self._last = cur.copy()

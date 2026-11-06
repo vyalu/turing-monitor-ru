@@ -36,6 +36,8 @@ class Engine:
         self.theme: Theme = theme_lib.load(settings.theme)
         self.renderer = Renderer(self.theme, self.scale_for(self.theme))
         self._blocks_cache: tuple[int, list] | None = None
+        self._shutdown_guard = threading.Lock()
+        self._shut_down = False
         self._settled = False   # была ли уже повторная инициализация после запуска/сна
         self._reinit_at = 0.0
         self.active_id = settings.theme   # тема на экране (может отличаться от выбранной — автосмена)
@@ -48,8 +50,9 @@ class Engine:
         self.hidden_skip: set[str] = set()
         self.hide_fps = False
         self._update_hidden(True)
+        self._shut_down = False
         self.display: Display = TuringRevA(settings.port, settings.chunk)
-        self.sender = FrameSender(self.display)
+        self.sender = self._make_sender()
         self.on_frame: FrameCallback | None = None
         self.on_status: Callable[[str], None] | None = None
 
@@ -152,9 +155,14 @@ class Engine:
         Система даёт программам всего несколько секунд, поэтому без ожидания
         рабочего потока: перехватываем порт и сразу шлём «выключить».
         """
+        with self._shutdown_guard:  # зовут и окно, и «сторож» выключения — гасим один раз
+            if self._shut_down:
+                return
+            self._shut_down = True
         self._stop.set()
         self._wake.set()
-        got = self._lock.acquire(timeout=3)
+        # ждём, пока досылается текущий кадр: «выключить» посреди картинки экран принял бы за пиксели
+        got = self._lock.acquire(timeout=4)
         try:
             if self.display.is_open:
                 try:
@@ -450,6 +458,11 @@ class Engine:
 
     REINIT_AFTER = 4.0
 
+    def _make_sender(self) -> FrameSender:
+        fs = FrameSender(self.display)
+        fs.abort = lambda: self._shut_down
+        return fs
+
     def _check_reinit(self) -> None:
         """Под замком: повторная инициализация экрана после первого подключения."""
         if self._reinit_at and time.monotonic() >= self._reinit_at and not self.blank:
@@ -457,7 +470,7 @@ class Engine:
             log.info("Повторная инициализация экрана (после запуска или сна)")
             self.display.close()
             self.display = TuringRevA(self.settings.port, self.settings.chunk)
-            self.sender = FrameSender(self.display)
+            self.sender = self._make_sender()
             self.connected = False
             self._need_setup = True
             self._next_connect = time.monotonic() + 0.5
@@ -468,7 +481,7 @@ class Engine:
                 self.settings.port = port
             self.display.close()
             self.display = TuringRevA(self.settings.port, self.settings.chunk)
-            self.sender = FrameSender(self.display)
+            self.sender = self._make_sender()
             self.connected = False
             self._need_setup = True
             self._next_connect = 0
@@ -675,8 +688,26 @@ class Engine:
             self.display.close()
             self._next_connect = time.monotonic() + self.RECONNECT_EVERY
             self._set_status(str(e))
+            # для журнала: раз в 10 минут напоминаем, что экран всё ещё не найден
+            now = time.monotonic()
+            if now - getattr(self, "_fail_logged", 0.0) > 600:
+                if getattr(self, "_fail_logged", 0.0):
+                    log.info("Экран всё ещё недоступен, пробую каждые %d с", int(self.RECONNECT_EVERY))
+                self._fail_logged = now
 
     def _run(self) -> None:
+        """Рабочий цикл; если в нём что-то сломалось — пишем в журнал и запускаем заново, а не молча
+        останавливаемся (экран замер бы до перезапуска программы)."""
+        while not self._stop.is_set():
+            try:
+                self._run_loop()
+            except Exception:  # noqa: BLE001
+                log.exception("Сбой в рабочем цикле, перезапуск")
+                with self._lock:
+                    self._need_setup = True
+                self._stop.wait(1.0)
+
+    def _run_loop(self) -> None:
         seen = -1
         raw: dict = {}
         history: dict = {}

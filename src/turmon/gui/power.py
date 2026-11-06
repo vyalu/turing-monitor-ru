@@ -128,3 +128,80 @@ def _register_suspend_notification(hwnd: int) -> None:
         fn(wintypes.HANDLE(hwnd), 0)  # DEVICE_NOTIFY_WINDOW_HANDLE
     except (AttributeError, OSError):
         pass
+
+
+# ---------------------------------------------------------------- независимый «сторож» выключения
+def start_shutdown_watcher(engine) -> None:
+    """Своё скрытое окно в отдельном потоке, которое ловит только выключение Windows.
+
+    Если основное окно в этот момент чем-то занято (или зависло), Windows может не дождаться его
+    ответа и закрыть программу, не дав погасить экран. Этот поток ни от чего не зависит и всегда
+    успевает отправить экрану «выключить». Кроме того, просим Windows оповещать нас о выключении
+    одними из первых.
+    """
+    if os.name != "nt":
+        return
+    import threading
+
+    try:  # 0x3FF — самый ранний уровень, доступный обычным программам
+        ctypes.windll.kernel32.SetProcessShutdownParameters(0x3FF, 0)
+    except (AttributeError, OSError):
+        pass
+
+    def run() -> None:
+        try:
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            LRESULT = ctypes.c_ssize_t
+            WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+            user32.DefWindowProcW.restype = LRESULT
+            user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+
+            def proc(hwnd, msg, wparam, lparam):
+                if msg == WM_QUERYENDSESSION or (msg == WM_ENDSESSION and wparam):
+                    try:
+                        engine.shutdown_now()
+                    except Exception:  # noqa: BLE001
+                        log.exception("Сторож выключения")
+                    if msg == WM_QUERYENDSESSION:
+                        return 1
+                    return 0
+                return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+            wndproc = WNDPROC(proc)
+
+            class WNDCLASSW(ctypes.Structure):
+                _fields_ = [("style", wintypes.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", ctypes.c_int),
+                            ("cbWndExtra", ctypes.c_int), ("hInstance", wintypes.HINSTANCE),
+                            ("hIcon", wintypes.HICON), ("hCursor", wintypes.HANDLE),
+                            ("hbrBackground", wintypes.HBRUSH), ("lpszMenuName", wintypes.LPCWSTR),
+                            ("lpszClassName", wintypes.LPCWSTR)]
+
+            kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+            hinst = kernel32.GetModuleHandleW(None)
+            wc = WNDCLASSW()
+            wc.lpfnWndProc = wndproc
+            wc.hInstance = hinst
+            wc.lpszClassName = "TuringMonitorRU-ShutdownWatcher"
+            user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+            if not user32.RegisterClassW(ctypes.byref(wc)):
+                raise OSError(ctypes.get_last_error())
+            user32.CreateWindowExW.restype = wintypes.HWND
+            user32.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                                               ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                               wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID]
+            # обычное (не message-only) невидимое окно: только такие получают WM_QUERYENDSESSION
+            hwnd = user32.CreateWindowExW(0, wc.lpszClassName, "TuringMonitorRU", 0, 0, 0, 0, 0,
+                                          None, None, hinst, None)
+            if not hwnd:
+                raise OSError(ctypes.get_last_error())
+            msg = wintypes.MSG()
+            user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+            _ = wndproc  # держим ссылку на обработчик, пока работает цикл
+        except Exception as e:  # noqa: BLE001
+            log.warning("Сторож выключения не запущен: %s", e)
+
+    threading.Thread(target=run, name="shutdown-watch", daemon=True).start()

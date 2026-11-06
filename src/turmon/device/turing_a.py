@@ -103,8 +103,18 @@ class TuringRevA(Display):
         try:
             self._ser = serial.Serial(port, 115200, timeout=1, write_timeout=5, rtscts=True)
         except Exception as e:  # noqa: BLE001
-            raise DisplayError(f"Не удалось открыть {port}: {e}. "
-                               "Возможно, порт занят другой программой (закройте TURZX).") from e
+            # после зависания или переподключения кабеля Windows может дать экрану другой номер порта
+            alt = [p for p in find_ports() if p != port]
+            if alt:
+                try:
+                    self._ser = serial.Serial(alt[0], 115200, timeout=1, write_timeout=5, rtscts=True)
+                    log.info("Экран нашёлся на %s вместо %s", alt[0], port)
+                    port = alt[0]
+                except Exception:  # noqa: BLE001
+                    self._ser = None
+            if self._ser is None:
+                raise DisplayError(f"Не удалось открыть {port}: {e}. "
+                                   "Возможно, порт занят другой программой (закройте TURZX).") from e
         self.port = port
         # дать контроллеру экрана «проснуться» и выбросить мусор, оставшийся в буферах порта
         time.sleep(0.2)

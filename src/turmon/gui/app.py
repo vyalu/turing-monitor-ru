@@ -170,7 +170,14 @@ def main(argv: list[str] | None = None) -> int:
         win.quitting = True
         win.tray.hide()
 
+    import threading as _th
+
+    def _thread_crash(args) -> None:  # падения фоновых потоков — в журнал, а не в никуда
+        logging.getLogger("turmon").error("Сбой в потоке %s", getattr(args.thread, "name", "?"),
+                  exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+    _th.excepthook = _thread_crash
     app.power_filter = power.install(app, engine, win, ended)  # type: ignore[attr-defined]
+    power.start_shutdown_watcher(engine)
     app.aboutToQuit.connect(lambda: engine.shutdown_now()
                             if settings.screen_off_on_exit and not engine._stop.is_set() else None)
 
