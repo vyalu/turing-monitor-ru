@@ -265,19 +265,35 @@ fn state_file() -> PathBuf {
 }
 
 /// Точка входа помощника: `turmon-core --media-helper --parent PID`.
+/// Работает, пока отвечает ядро (127.0.0.1:47870). Открыть процесс ядра (с правами администратора)
+/// помощник без прав не может, поэтому проверяем по связи, а не по процессу.
 #[cfg(windows)]
 pub fn run_helper(parent: u32) {
-    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
+    // одна копия помощника
+    unsafe {
+        use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
+        let name: Vec<u16> = "Local\\TuringMonitorRU-media-core".encode_utf16().chain(Some(0)).collect();
+        let h = windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 1, name.as_ptr());
+        if h.is_null() || GetLastError() == ERROR_ALREADY_EXISTS {
+            return;
+        }
+    }
     let out = state_file();
     let mut r = gsmtc::Reader::new();
     let mut diag: Vec<String> = vec![];
     let mut next_diag = Instant::now();
-    info!("Медиа-помощник запущен (родитель {parent})");
-    let ph = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, parent) };
+    let mut next_check = Instant::now() + Duration::from_secs(10);
+    let mut misses = 0;
+    info!("Медиа-помощник запущен (ядро {parent})");
     loop {
-        if parent != 0 && (ph.is_null() || unsafe { WaitForSingleObject(ph, 0) } != WAIT_TIMEOUT) {
-            break;
+        if Instant::now() >= next_check {
+            next_check = Instant::now() + Duration::from_secs(5);
+            let alive = std::net::TcpStream::connect_timeout(&([127, 0, 0, 1], crate::ipc::PORT).into(),
+                                                             Duration::from_secs(2)).is_ok();
+            misses = if alive { 0 } else { misses + 1 };
+            if misses >= 3 {
+                break; // ядро закрыто — уходим
+            }
         }
         if Instant::now() >= next_diag {
             diag = r.diagnose();
@@ -295,9 +311,7 @@ pub fn run_helper(parent: u32) {
         }
         std::thread::sleep(Duration::from_secs(1));
     }
-    if !ph.is_null() {
-        unsafe { CloseHandle(ph) };
-    }
+    info!("Медиа-помощник: ядро закрыто, выход");
 }
 
 #[cfg(windows)]
@@ -352,11 +366,13 @@ impl WinMedia {
             }
             // с правами администратора — через помощника
             let mut last_start: Option<Instant> = None;
+            let mut starts = 0;
             while !stop.load(Ordering::SeqCst) {
                 let data: Option<Value> = std::fs::read_to_string(state_file()).ok().and_then(|t| serde_json::from_str(&t).ok());
                 let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f64();
                 match data.filter(|d| now - d["ts"].as_f64().unwrap_or(0.0) < STALE) {
                     Some(d) => {
+                        starts = 0;
                         *values.lock().unwrap() = from_json(&d["values"]);
                         *sessions.lock().unwrap() = d["sessions"].as_array()
                             .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
@@ -364,8 +380,10 @@ impl WinMedia {
                     }
                     None => {
                         values.lock().unwrap().clear();
-                        if last_start.is_none_or(|t| t.elapsed().as_secs() > 30) {
+                        // не больше трёх попыток: каждый запуск задачи — лишняя нагрузка (и мешал бы в играх)
+                        if starts < 3 && last_start.is_none_or(|t| t.elapsed().as_secs() > 60) {
                             last_start = Some(Instant::now());
+                            starts += 1;
                             let ok = start_helper();
                             info!("Медиа: запуск помощника без прав администратора: {}", if ok { "ок" } else { "ошибка" });
                             if !ok {
