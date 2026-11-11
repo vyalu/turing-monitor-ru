@@ -1214,6 +1214,7 @@ dependencies = [
  "sysinfo",
  "tiny-skia",
  "ureq",
+ "windows",
  "windows-sys 0.61.2",
  "winresource",
 ]

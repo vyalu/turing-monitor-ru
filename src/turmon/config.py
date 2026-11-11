@@ -72,6 +72,7 @@ class Settings:
     user_text2: str = ""
     user_text3: str = ""
 
+    rust_core: bool = False              # ядро на Rust (turmon-core.exe) рисует и шлёт на экран
     autostart: bool = False
     start_minimized: bool = True
     screen_off_on_exit: bool = True

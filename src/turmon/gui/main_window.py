@@ -1122,6 +1122,31 @@ class SettingsPage(QWidget):
         sec["main"].addWidget(bright_group)
         sec["main"].addWidget(anim_group)
 
+        from .. import core_client
+
+        if core_client.core_exe() is not None:
+            g = QGroupBox("Ядро на Rust (тест)")
+            v = QVBoxLayout(g)
+            v.addWidget(hint("Новая лёгкая фоновая часть: рисует тему и шлёт её на мини-экран, опрашивает датчики "
+                             "и живёт в трее, занимая около 30 МБ памяти. Это окно остаётся для настроек и "
+                             "редактора и закрывается полностью. Пока в тесте: если что-то работает не так — "
+                             "выключите и перезапустите программу."))
+            self.rust_cb = QCheckBox("Использовать ядро на Rust")
+            self.rust_cb.setChecked(self.s.rust_core)
+
+            def rust_toggled(on: bool) -> None:
+                self._set("rust_core", on)
+                if not on and core_client.core_running():
+                    core_client.request("quit")
+                QMessageBox.information(self, "Ядро на Rust",
+                                        "Перезапустите программу (Выход в меню значка в трее и запуск снова), "
+                                        "чтобы изменения вступили в силу.")
+            self.rust_cb.toggled.connect(rust_toggled)
+            v.addWidget(self.rust_cb)
+            st = label("работает" if getattr(self.engine, "remote", False) else "не используется", "muted")
+            v.addWidget(st)
+            sec["about"].addWidget(g)
+
         g = QGroupBox("Обновления и журнал")
         v = QVBoxLayout(g)
         self.upd = QCheckBox("Проверять обновления на GitHub")
@@ -1709,8 +1734,11 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    client_mode = False  # окно — «пульт» ядра на Rust: закрытие окна не останавливает показ на экране
+
     def closeEvent(self, e: QCloseEvent) -> None:  # noqa: N802
-        if not self.quitting and self.engine.settings.minimize_to_tray and self.tray.isVisible():
+        if not self.quitting and not self.client_mode and self.engine.settings.minimize_to_tray \
+                and self.tray.isVisible():
             e.ignore()
             self.hide()
             if self.engine.settings.first_run:

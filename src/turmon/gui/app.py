@@ -98,7 +98,18 @@ def _start_elevated_via_task(args) -> bool:
 
     if is_admin() or winsys.autostart_state() != "task":
         return False
+    from .. import core_client
+
+    rust = Settings.load().rust_core and core_client.core_exe() is not None
+    if rust and core_client.core_running():
+        return False  # ядро уже работает с правами — окну они не нужны
     if not winsys.run_task():
+        return False
+    if rust:
+        # задача запустит ядро с правами администратора; окно откроем здесь, без прав
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not core_client.core_running():
+            time.sleep(0.4)
         return False
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -156,12 +167,24 @@ def main(argv: list[str] | None = None) -> int:
 
     apply_style(app)
     settings = Settings.load()
-    engine = Engine(settings)
+    from .. import core_client
+
+    remote = False
+    if settings.rust_core and core_client.core_exe() is not None:
+        # ядро на Rust рисует тему и живёт в трее; окно только настраивает его
+        remote = core_client.start_core(tray=True)
+        if not remote:
+            logging.getLogger("turmon").warning("Ядро на Rust не отвечает — работаю как обычно")
+    engine = core_client.RemoteEngine(settings) if remote else Engine(settings)
     engine.start()
 
     from .main_window import MainWindow
 
     win = MainWindow(engine)
+    if remote:
+        win.client_mode = True
+        win.tray.hide()  # значок в трее — у ядра
+        engine.frames_wanted = win.isVisible
 
     from . import power
 
@@ -176,10 +199,11 @@ def main(argv: list[str] | None = None) -> int:
         logging.getLogger("turmon").error("Сбой в потоке %s", getattr(args.thread, "name", "?"),
                   exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
     _th.excepthook = _thread_crash
-    app.power_filter = power.install(app, engine, win, ended)  # type: ignore[attr-defined]
-    power.start_shutdown_watcher(engine)
-    app.aboutToQuit.connect(lambda: engine.shutdown_now()
-                            if settings.screen_off_on_exit and not engine._stop.is_set() else None)
+    if not remote:  # с ядром на Rust выключение, сон и мониторы обрабатывает оно само
+        app.power_filter = power.install(app, engine, win, ended)  # type: ignore[attr-defined]
+        power.start_shutdown_watcher(engine)
+        app.aboutToQuit.connect(lambda: engine.shutdown_now()
+                                if settings.screen_off_on_exit and not engine._stop.is_set() else None)
 
     def on_conn() -> None:
         c = server.nextPendingConnection()
@@ -197,6 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.file:
         QTimer.singleShot(800, lambda: (win.show_normal(), win.home.import_pack(os.path.abspath(args.file))))
 
+    if remote and args.minimized:
+        # автозапуск в режиме ядра: окно не нужно, ядро уже работает в трее
+        INSTANCE.release()
+        return 0
     if not (args.minimized and settings.start_minimized):
         win.show()
         QTimer.singleShot(500, engine.mark_ui_ready)

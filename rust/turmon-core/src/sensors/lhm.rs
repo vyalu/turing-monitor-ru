@@ -190,6 +190,7 @@ impl Provider for LhmProvider {
             cmd.creation_flags(0x0800_0000); // без окна консоли
         }
         let mut child = cmd.spawn()?;
+        crate::platform::kill_with_parent(&child);
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
         self.host = Some(Host { child, stdin, stdout });

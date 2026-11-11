@@ -64,6 +64,8 @@ jobs:
           Write-Output "::notice title=ядро::$st"
           Write-Output "::notice title=показатели::всего $(@($vals.PSObject.Properties).Count); cpu.load=$($vals.'cpu.load'); cpu.temp=$($vals.'cpu.temp'); ram.used=$($vals.'ram.used'); датчиков LHM: $(@($sens).Count)"
           Write-Output "::notice title=ресурсы::память $mem МБ, процессор за 15 с: $cpu с"
+          Write-Output "::notice title=музыка::$(Q 'media_diag') | $(Q 'media_ext')"
+          Write-Output "::notice title=источники::$((Q 'status' | ConvertFrom-Json).providers | ConvertTo-Json -Compress)"
           $log = Get-Content "$env:APPDATA/TuringMonitorRU/turmon-core.log" -Raw -ErrorAction SilentlyContinue
           Write-Output "::notice title=журнал::$($log -replace "`r?`n", ' | ')"
           Q "quit" | Out-Null

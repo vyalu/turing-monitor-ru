@@ -37,6 +37,17 @@ fn open_gui() {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let tray = !args.iter().any(|a| a == "--no-tray");
+    #[cfg(windows)]
+    if let Some(i) = args.iter().position(|a| a == "--media-helper") {
+        // помощник без прав администратора: только читает музыку из Windows
+        let parent = args.iter().position(|a| a == "--parent").and_then(|j| args.get(j + 1)).and_then(|p| p.parse().ok())
+            .unwrap_or(0);
+        let _ = i;
+        let spec = flexi_logger::FileSpec::default().directory(config::data_dir()).basename("media_helper_core").suppress_timestamp();
+        let _ = flexi_logger::Logger::try_with_str("info").map(|l| l.log_to_file(spec).start().map(std::mem::forget));
+        turmon_core::sensors::media::run_helper(parent);
+        return;
+    }
     setup_logging();
     std::panic::set_hook(Box::new(|p| error!("Сбой: {p}")));
 

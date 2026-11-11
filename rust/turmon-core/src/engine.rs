@@ -61,10 +61,13 @@ struct Inner {
 
 pub struct Engine {
     inner: Mutex<Inner>,
+    /// Откуда пришла погода (open-meteo.com / met.no / wttr.in).
+    pub weather_source: Mutex<Arc<Mutex<String>>>,
     pub hub: Hub,
     pub status: Mutex<Status>,
     pub last_frame: Mutex<Option<RgbImage>>,
     pub lhm_sensors: Mutex<Option<Arc<Mutex<Vec<crate::sensors::lhm::Sensor>>>>>,
+    pub media: Mutex<Option<crate::sensors::media::MediaInfo>>,
     stop: AtomicBool,
     shut_down: Arc<AtomicBool>,
     wake: (Mutex<bool>, Condvar),
@@ -108,9 +111,11 @@ impl Engine {
                 blocks: None, hidden: HashSet::new(), hide_fps: false, fail_logged: 0.0,
             }),
             hub: Hub::new(),
+            weather_source: Mutex::new(Arc::new(Mutex::new(String::new()))),
             status: Mutex::new(Status { text: "Запуск…".into(), ..Default::default() }),
             last_frame: Mutex::new(None),
             lhm_sensors: Mutex::new(None),
+            media: Mutex::new(None),
             stop: AtomicBool::new(false),
             shut_down: Arc::new(AtomicBool::new(false)),
             wake: (Mutex::new(false), Condvar::new()),
@@ -155,6 +160,12 @@ impl Engine {
             me.hub.request_now();
         });
         self.start_weather(&s);
+        if s.fps_enabled {
+            self.hub.add(Box::new(crate::sensors::fps::FpsProvider::default()));
+        }
+        if s.media_enabled {
+            self.start_media();
+        }
         *self.hub.custom.lock().unwrap() = s.custom_values();
         let me = self.clone();
         let me2 = self.clone();
@@ -171,8 +182,27 @@ impl Engine {
             (Some(lat), Some(lon)) => Some(weather::City { name: s.city.clone(), lat, lon, region: String::new() }),
             _ => None,
         };
-        let (bg, _src) = weather::provider(city, s.weather_auto, config::data_dir().join("weather_location.json"));
+        let (bg, src) = weather::provider(city, s.weather_auto, config::data_dir().join("weather_location.json"));
+        *self.weather_source.lock().unwrap() = src;
         self.hub.add(Box::new(bg));
+    }
+
+    fn start_media(&self) {
+        let mut m = crate::sensors::media::MediaProvider::new();
+        if crate::sensors::Provider::start(&mut m).is_ok() {
+            *self.media.lock().unwrap() = m.info();
+            self.hub.add_started(Box::new(m));
+        }
+    }
+
+    /// Переоткрыть LibreHardwareMonitor (например, после установки драйвера PawnIO).
+    pub fn reopen_lhm(self: &Arc<Self>) {
+        self.hub.remove("LibreHardwareMonitor");
+        let s = self.settings();
+        let lhm = LhmProvider::new(s.sensor_overrides.clone(), s.disk_index.max(0) as usize);
+        *self.lhm_sensors.lock().unwrap() = Some(lhm.last.clone());
+        self.hub.add(Box::new(lhm));
+        self.hub.request_now();
     }
 
     // ---------------------------------------------------------------- настройки (их пишет окно программы)
@@ -193,11 +223,13 @@ impl Engine {
         let path = config::settings_file();
         let new = Settings::load(&path);
         let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-        let (weather_changed, old_theme, port_changed) = {
+        let (weather_changed, old_theme, port_changed, fps_changed, media_changed) = {
             let mut i = self.inner.lock().unwrap();
             let old = std::mem::replace(&mut i.settings, new.clone());
             i.settings_mtime = mtime;
             let wc = old.lat != new.lat || old.lon != new.lon || old.weather_auto != new.weather_auto;
+            let fc = old.fps_enabled != new.fps_enabled;
+            let mc = old.media_enabled != new.media_enabled;
             let pc = old.port != new.port || old.chunk != new.chunk;
             // масштабы и скрытые блоки текущей темы
             let key = Self::scale_key(&i);
@@ -210,11 +242,24 @@ impl Engine {
                 i.need_setup = true;
             }
             i.applied_brightness = None;
-            (wc, old.theme, pc)
+            (wc, old.theme, pc, fc, mc)
         };
         *self.hub.custom.lock().unwrap() = new.custom_values();
         if weather_changed {
             self.start_weather(&new);
+        }
+        if fps_changed {
+            self.hub.remove("FPS");
+            if new.fps_enabled {
+                self.hub.add(Box::new(crate::sensors::fps::FpsProvider::default()));
+            }
+        }
+        if media_changed {
+            self.hub.remove("Сейчас играет");
+            *self.media.lock().unwrap() = None;
+            if new.media_enabled {
+                self.start_media();
+            }
         }
         if old_theme != new.theme {
             self.set_theme(&new.theme);

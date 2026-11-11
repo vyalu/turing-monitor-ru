@@ -20,7 +20,11 @@ fn handle(engine: &Arc<Engine>, req: &Value, quit: &dyn Fn()) -> Value {
             let s = engine.status.lock().unwrap().clone();
             json!({"ok": true, "text": s.text, "connected": s.connected, "theme": s.active_theme,
                    "reason": s.reason, "page": s.page, "send_ms": s.send_ms, "paused": engine.paused(),
-                   "sensors_ms": engine.hub.last_update_ms.load(std::sync::atomic::Ordering::SeqCst)})
+                   "sensors_ms": engine.hub.last_update_ms.load(std::sync::atomic::Ordering::SeqCst),
+                   "weather_source": engine.weather_source.lock().unwrap().lock().unwrap().clone(),
+                   "providers": engine.hub.statuses().into_iter().map(|(n, s)| json!({"name": n, "status": s}))
+                       .collect::<Vec<_>>(),
+                   "admin": crate::platform::is_admin()})
         }
         "values" => {
             let (v, _) = engine.hub.snapshot();
@@ -49,6 +53,25 @@ fn handle(engine: &Arc<Engine>, req: &Value, quit: &dyn Fn()) -> Value {
         }
         "blocks" => json!({"ok": true, "blocks": engine.theme_blocks().iter()
             .map(|b| json!({"key": b.key, "title": b.title, "ids": b.ids})).collect::<Vec<_>>()}),
+        "media_diag" => {
+            let m = engine.media.lock().unwrap().clone();
+            match m {
+                Some(m) => json!({"ok": true, "lines": m.diagnose()}),
+                None => json!({"ok": true, "lines": ["Функция «Сейчас играет» выключена."]}),
+            }
+        }
+        "media_ext" => {
+            let m = engine.media.lock().unwrap().clone();
+            json!({"ok": true, "text": m.map(|m| m.extension_status()).unwrap_or("включите «Сейчас играет»".into())})
+        }
+        "reopen_lhm" => {
+            engine.reopen_lhm();
+            json!({"ok": true})
+        }
+        "history" => {
+            let (_, h) = engine.hub.snapshot();
+            json!({"ok": true, "history": h})
+        }
         "reload" => {
             engine.reload_settings();
             json!({"ok": true})

@@ -1,6 +1,8 @@
 //! Датчики: каждый источник дописывает свои показатели в общий словарь.
 
+pub mod fps;
 pub mod lhm;
+pub mod media;
 pub mod system;
 pub mod weather;
 
@@ -100,6 +102,11 @@ impl Hub {
             warn!("Источник {} недоступен: {e}", p.name());
             return;
         }
+        self.providers.lock().unwrap().push(p);
+    }
+
+    /// Добавить уже запущенный источник.
+    pub fn add_started(&self, p: Box<dyn Provider>) {
         self.providers.lock().unwrap().push(p);
     }
 
