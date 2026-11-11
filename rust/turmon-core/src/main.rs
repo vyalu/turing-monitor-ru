@@ -1,3 +1,4 @@
+#![cfg_attr(windows, windows_subsystem = "windows")] // без окна консоли
 //! turmon-core — фоновая часть Turing Monitor RU на Rust: рисует тему и шлёт её на мини-экран.
 //!
 //! Запуск: `turmon-core` (с значком в трее) или `turmon-core --no-tray` (когда значок показывает окно
