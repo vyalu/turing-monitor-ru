@@ -96,6 +96,9 @@ var
 begin
   { программа держит COM-порт и файлы в папке — закрываем её перед копированием }
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExe} /F /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  { ядро на Rust и его помощники }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM turmon-core.exe /F /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM lhm-host.exe /F', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Sleep(800);
 end;
 

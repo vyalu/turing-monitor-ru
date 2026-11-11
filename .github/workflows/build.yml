@@ -2,7 +2,7 @@ name: Сборка
 
 on:
   push:
-    branches: [main]
+    branches: [main, rust]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -85,6 +85,15 @@ jobs:
         continue-on-error: true
         run: python tools/smoke_windows.py
 
+      - name: Ядро на Rust
+        if: hashFiles('rust/Cargo.toml') != ''
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo build --release --manifest-path rust/Cargo.toml
+          dotnet build rust/lhm-host/lhm-host.csproj -c Release -o rust/lhm-host/out
+          Write-Output "::notice title=ядро на Rust::$((Get-Item rust/target/release/turmon-core.exe).Length) байт"
+
       - name: Сборка exe (один файл)
         shell: pwsh
         run: |
@@ -96,6 +105,12 @@ jobs:
         run: |
           $env:TURMON_ONEFILE = "0"
           pyinstaller --noconfirm --distpath dist-dir --workpath build/pyi-dir packaging/turmon.spec
+          if (Test-Path rust/target/release/turmon-core.exe) {
+            # ядро на Rust: рядом с программой, lhm-host — в папке lhm
+            Copy-Item rust/target/release/turmon-core.exe dist-dir/TuringMonitorRU/
+            New-Item -ItemType Directory -Force dist-dir/TuringMonitorRU/lhm | Out-Null
+            Copy-Item rust/lhm-host/out/* dist-dir/TuringMonitorRU/lhm/ -Recurse -Force
+          }
           Compress-Archive -Path dist-dir/TuringMonitorRU -DestinationPath dist/TuringMonitorRU-portable.zip
 
       - name: Установщик (Inno Setup)
