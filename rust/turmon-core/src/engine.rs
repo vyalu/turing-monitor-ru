@@ -150,6 +150,8 @@ impl Engine {
     pub fn start(self: &Arc<Self>) {
         let s = self.settings();
         self.hub.add(Box::new(SystemProvider::new(&s.net_iface, &s.disk)));
+        #[cfg(windows)]
+        self.hub.add(Box::new(crate::sensors::volume::VolumeProvider::new()));
         // LibreHardwareMonitor открывается секунду-другую — в фоне
         let me = self.clone();
         std::thread::spawn(move || {

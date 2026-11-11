@@ -4,6 +4,7 @@ pub mod fps;
 pub mod lhm;
 pub mod media;
 pub mod system;
+pub mod volume;
 pub mod weather;
 
 use std::collections::{HashMap, VecDeque};
