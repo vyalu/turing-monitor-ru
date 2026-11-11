@@ -5,9 +5,15 @@ use super::Provider;
 #[cfg(windows)]
 use crate::values::{Val, Values};
 
+/// COM-объект используется только из потока датчиков (создаётся в нём же при первом опросе).
+#[cfg(windows)]
+struct Ep(windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume);
+#[cfg(windows)]
+unsafe impl Send for Ep {}
+
 #[cfg(windows)]
 pub struct VolumeProvider {
-    ep: Option<windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume>,
+    ep: Option<Ep>,
 }
 
 #[cfg(windows)]
@@ -25,10 +31,10 @@ impl VolumeProvider {
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
                 let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
                 let dev = en.GetDefaultAudioEndpoint(eRender, eMultimedia)?;
-                self.ep = Some(dev.Activate(CLSCTX_ALL, None)?);
+                self.ep = Some(Ep(dev.Activate(CLSCTX_ALL, None)?));
             }
         }
-        Ok(self.ep.as_ref().unwrap())
+        Ok(&self.ep.as_ref().unwrap().0)
     }
 }
 
