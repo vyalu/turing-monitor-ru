@@ -1,0 +1,16 @@
+[package]
+name = "turmon-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ab_glyph = "0.2.32"
+anyhow = "1.0.104"
+chrono = "0.4.45"
+fast_image_resize = "6.1.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp"] }
+log = "0.4.35"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tiny-skia = "0.12.0"
