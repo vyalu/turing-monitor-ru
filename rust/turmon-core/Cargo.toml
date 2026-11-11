@@ -6,11 +6,26 @@ edition = "2024"
 [dependencies]
 ab_glyph = "0.2.32"
 anyhow = "1.0.104"
+base64 = "0.23.1"
 chrono = "0.4.45"
 fast_image_resize = "6.1.0"
+flexi_logger = "0.31.10"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "gif", "webp"] }
 log = "0.4.35"
 regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+serialport = { version = "4.10.1", default-features = false }
+sysinfo = "0.40.1"
 tiny-skia = "0.12.0"
+ureq = { version = "3.5.1", features = ["json"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_System_Power", "Win32_System_Threading", "Win32_System_SystemServices", "Win32_Graphics_Gdi", "Win32_Security"] }
+
+[[bin]]
+name = "turmon-core"
+path = "src/main.rs"
+
+[build-dependencies]
+winresource = "0.1.34"

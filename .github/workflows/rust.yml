@@ -1,0 +1,76 @@
+name: rust-core
+
+on:
+  push:
+    branches: [rust]
+    paths: ["rust/**", ".github/workflows/rust.yml", "themes/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust }
+      - name: Тесты
+        working-directory: rust
+        run: cargo test --release
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: rust }
+      - name: Сборка ядра
+        working-directory: rust
+        run: cargo build --release
+      - name: Сборка lhm-host (LibreHardwareMonitor)
+        working-directory: rust/lhm-host
+        run: dotnet build -c Release -o out
+      - name: Сборка папки программы
+        shell: pwsh
+        run: |
+          $d = "dist/TuringMonitorRU-core"
+          New-Item -ItemType Directory -Force $d, "$d/lhm" | Out-Null
+          Copy-Item rust/target/release/turmon-core.exe $d
+          Copy-Item rust/lhm-host/out/* "$d/lhm" -Recurse
+          Copy-Item themes "$d/themes" -Recurse
+          New-Item -ItemType Directory -Force "$d/assets" | Out-Null
+          Copy-Item src/turmon/assets/fonts "$d/assets/fonts" -Recurse
+          Copy-Item src/turmon/assets/icon.ico "$d/assets/"
+          $size = (Get-Item "$d/turmon-core.exe").Length
+          Write-Output "::notice title=размер::turmon-core.exe $([math]::Round($size/1MB,1)) МБ"
+      - name: Проверка на Windows
+        shell: pwsh
+        run: |
+          $d = "dist/TuringMonitorRU-core"
+          $p = Start-Process "$d/turmon-core.exe" -ArgumentList "--no-tray" -PassThru
+          Start-Sleep -Seconds 15
+          function Q($cmd) {
+            $c = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 47870)
+            $s = $c.GetStream(); $w = New-Object System.IO.StreamWriter($s); $r = New-Object System.IO.StreamReader($s)
+            $w.WriteLine("{`"cmd`":`"$cmd`"}"); $w.Flush(); $line = $r.ReadLine(); $c.Close(); return $line
+          }
+          $st = Q "status"
+          $vals = (Q "values" | ConvertFrom-Json).values
+          $sens = (Q "sensors" | ConvertFrom-Json).sensors
+          $proc = Get-Process -Id $p.Id
+          $mem = [math]::Round($proc.WorkingSet64 / 1MB, 1)
+          $cpu = [math]::Round($proc.TotalProcessorTime.TotalSeconds, 2)
+          Write-Output "::notice title=ядро::$st"
+          Write-Output "::notice title=показатели::всего $(@($vals.PSObject.Properties).Count); cpu.load=$($vals.'cpu.load'); cpu.temp=$($vals.'cpu.temp'); ram.used=$($vals.'ram.used'); датчиков LHM: $(@($sens).Count)"
+          Write-Output "::notice title=ресурсы::память $mem МБ, процессор за 15 с: $cpu с"
+          $log = Get-Content "$env:APPDATA/TuringMonitorRU/turmon-core.log" -Raw -ErrorAction SilentlyContinue
+          Write-Output "::notice title=журнал::$($log -replace "`r?`n", ' | ')"
+          Q "quit" | Out-Null
+          Start-Sleep -Seconds 2
+          if (-not $proc.HasExited) { Stop-Process -Id $p.Id -Force }
+          if (@($sens).Count -eq 0) { Write-Output "::warning title=LHM::lhm-host не отдал датчики" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuringMonitorRU-core
+          path: dist/TuringMonitorRU-core

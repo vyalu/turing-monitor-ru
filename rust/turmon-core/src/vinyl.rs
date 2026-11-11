@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use serde_json::json;
-use tiny_skia::{LineCap, Pixmap, Transform};
+use tiny_skia::{Pixmap, Transform};
 
 use crate::canvas::{self, Canvas, Fit};
 use crate::color::{self, Rgba};

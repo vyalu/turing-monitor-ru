@@ -11,3 +11,15 @@ pub mod canvas;
 pub mod render;
 pub mod icons;
 pub mod vinyl;
+pub mod device;
+pub mod sensors;
+pub mod config;
+pub mod smooth;
+pub mod overlay;
+pub mod sources;
+pub mod blocks;
+pub mod engine;
+pub mod platform;
+pub mod ipc;
+#[cfg(windows)]
+pub mod win;
