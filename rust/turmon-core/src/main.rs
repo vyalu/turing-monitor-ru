@@ -11,7 +11,7 @@ use turmon_core::{config, engine::Engine, ipc};
 
 fn setup_logging() {
     let spec = flexi_logger::FileSpec::default().directory(config::data_dir()).basename("turmon-core").suppress_timestamp();
-    let _ = flexi_logger::Logger::try_with_str("info").map(|l| {
+    let _ = flexi_logger::Logger::try_with_str("info, tiny_skia=error").map(|l| {
         l.log_to_file(spec)
             .duplicate_to_stderr(flexi_logger::Duplicate::Warn)
             .rotate(flexi_logger::Criterion::Size(2_000_000), flexi_logger::Naming::NumbersDirect,
@@ -45,7 +45,7 @@ fn main() {
             .unwrap_or(0);
         let _ = i;
         let spec = flexi_logger::FileSpec::default().directory(config::data_dir()).basename("media_helper_core").suppress_timestamp();
-        let _ = flexi_logger::Logger::try_with_str("info").map(|l| l.log_to_file(spec).start().map(std::mem::forget));
+        let _ = flexi_logger::Logger::try_with_str("info, tiny_skia=error").map(|l| l.log_to_file(spec).start().map(std::mem::forget));
         turmon_core::sensors::media::run_helper(parent);
         return;
     }
