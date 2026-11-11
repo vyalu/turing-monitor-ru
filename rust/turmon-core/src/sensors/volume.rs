@@ -1,6 +1,8 @@
 //! Громкость системы (Windows Core Audio).
 
+#[cfg(windows)]
 use super::Provider;
+#[cfg(windows)]
 use crate::values::{Val, Values};
 
 #[cfg(windows)]

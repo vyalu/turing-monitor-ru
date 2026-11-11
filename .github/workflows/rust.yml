@@ -27,7 +27,14 @@ jobs:
         with: { workspaces: rust }
       - name: Сборка ядра
         working-directory: rust
-        run: cargo build --release
+        shell: pwsh
+        run: |
+          cargo build --release --message-format short 2> err.txt
+          if ($LASTEXITCODE -ne 0) {
+            $e = (Get-Content err.txt | Select-String -Pattern "error|warning: unused" -Context 0,2 | ForEach-Object { $_.ToString() }) -join "%0A"
+            Write-Output "::error title=cargo::$e"
+            exit 1
+          }
       - name: Сборка lhm-host (LibreHardwareMonitor)
         working-directory: rust/lhm-host
         run: dotnet build -c Release -o out
