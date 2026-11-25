@@ -31,14 +31,14 @@ PLAN: dict[str, tuple[dict, dict]] = {
     "gauges": ({"text9": "FPS " + F}, {"ram.load": "fps"}),
     "glass": ({"text10": "FPS · {fps.app}", "text11": F + " FPS"}, {"net.down": "fps"}),
     "minimal": ({"text15": "FPS", "text16": F, "text17": "1% " + LOW}, {"net.down": "fps"}),
-    "neon": ({"text13": "FPS", "text14": F + " · 1% " + LOW}, {"disk.load": "fps"}),
+    "neon": ({"text13": "FPS", "text14": F + " · 1% " + LOW}, {"disk.temp": "fps"}),
     "neon_land": ({"text12": "FPS " + F + " · 1% low " + LOW}, {}),
     "retro": ({"text10": "FPS {fps.value:3.0f}  1% {fps.low1:3.0f}  {fps.frametime:4.1f}мс"}, {}),
-    "rings": ({"text12": F, "text13": "FPS", "text14": "1% " + LOW}, {"disk.load": "fps"}),
+    "rings": ({"text12": F, "text13": "FPS", "text14": "1% " + LOW}, {"disk.temp": "fps"}),
     "sunset": ({"text10": "FPS", "text11": F, "text12": "1% " + LOW}, {"ram.load": "fps"}),
     "terminal": ({"text9": "fps " + F + " low " + LOW}, {}),
     # уникальные темы (tools/make_themes_v3.py)
-    "uniq_batarejki": ({"text9": F, "text10": "FPS"}, {"disk.load": "fps"}),
+    "uniq_batarejki": ({"text9": F, "text10": "FPS"}, {"disk.temp": "fps"}),
     "uniq_chasy_kolca": ({"text7": "FPS", "text8": F + " · 1% " + LOW}, {"ram.load": "fps"}),
     "uniq_chek": ({"text16": "FPS", "text17": F, "text18": "  1% low", "text19": LOW,
                    "text20": "  кадр", "text21": "{fps.frametime:.1f} мс"}, {}),
@@ -48,31 +48,31 @@ PLAN: dict[str, tuple[dict, dict]] = {
     "uniq_metro": ({"text13": "FPS", "text14": F + " · 1% " + LOW}, {}),
     "uniq_orbity": ({"text10": "FPS", "text11": F, "text12": "1% " + LOW}, {"gpu.mem_load": "fps"}),
     "uniq_pogoda": ({"text16": "FPS " + F + " · 1% " + LOW}, {}),
-    "uniq_polosy": ({"text13": "FPS", "text14": "1% low " + LOW, "text15": F}, {"disk.load": "fps"}),
+    "uniq_polosy": ({"text13": "FPS", "text14": "1% low " + LOW, "text15": F}, {"disk.temp": "fps"}),
     "uniq_pribory": ({"text17": "FPS " + F}, {}),
     "uniq_radar": ({"text10": "FPS   " + F + "  1% " + LOW}, {}),
     "uniq_rpg": ({"text25": "FPS", "text26": F}, {}),
     "uniq_tablica": ({"text23": "FPS", "text24": F, "text25": LOW, "text26": "{fps.frametime:.1f} мс"},
-                     {"disk.load": "fps"}),
+                     {"disk.temp": "fps"}),
     "uniq_vyveska": ({"text7": "FPS " + F}, {}),
 }
 # темы «Графит» (tools/make_themes_v2.py) собраны из общих раскладок — правила по тексту элементов
 BY_LAYOUT: dict[str, tuple[dict, dict]] = {
-    "lay_dash": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.load": "fps"}),
-    "lay_quad": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": "1% " + LOW, "{disk.load:.0f}%": F},
-                 {"disk.load": "fps"}),
+    "lay_dash": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.temp": "fps"}),
+    "lay_quad": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": "1% " + LOW, "{disk.temp:.0f}°": F},
+                 {"disk.temp": "fps"}),
     "lay_clock": ({"NET": "FPS", "{net.down:speed}": F}, {"net.down": "fps"}),
     "lay_graph": ({"ОТДАЧА": "FPS", "{net.up:speed}": F}, {}),
-    "lay_portrait": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.load": "fps"}),
-    "lay_strip": ({"ДИСК": "FPS", "{disk.load:.0f}%": F, "{disk.free:.0f} ГБ": "1% " + LOW}, {"disk.load": "fps"}),
-    "lay_hero": ({"ДИСК": "FPS", "{disk.load:.0f}%": F + " · 1% " + LOW}, {"disk.load": "fps"}),
+    "lay_portrait": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ своб.": F + " · 1% " + LOW}, {"disk.temp": "fps"}),
+    "lay_strip": ({"ДИСК": "FPS", "{disk.temp:.0f}°": F, "{disk.free:.0f} ГБ": "1% " + LOW}, {"disk.temp": "fps"}),
+    "lay_hero": ({"ДИСК": "FPS", "{disk.temp:.0f}°": F + " · 1% " + LOW}, {"disk.temp": "fps"}),
     "lay_temps": ({"RAM {ram.used:.1f}/{ram.total:.0f} ГБ": "FPS " + F + " · 1% low " + LOW}, {}),
     "lay_minimal": ({"ПАМЯТЬ": "FPS", "{ram.load:.0f}%": F}, {"ram.load": "fps"}),
     "lay_eq": ({"КУЛЕР": "FPS", "{gpu.fan_load:.0f}%": F}, {"gpu.fan_load": "fps"}),
     "lay_player": ({"СЕТЬ": "FPS", "{net.down:speed}": F}, {}),
     "lay_player_p": ({"↑ {net.up:speed}": "FPS " + F}, {}),
-    "lay_portrait2": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ": "1% " + LOW, "{disk.load:.0f}%": F},
-                      {"disk.load": "fps"}),
+    "lay_portrait2": ({"ДИСК": "FPS", "{disk.free:.0f} ГБ": "1% " + LOW, "{disk.temp:.0f}°": F},
+                      {"disk.temp": "fps"}),
 }
 TEXT_PLAN: dict[str, tuple[dict, dict]] = {}
 try:
@@ -145,8 +145,10 @@ if __name__ == "__main__":
             n = apply(f)
             total += n
             print(f"{f.name}: {n}")
+    # темы tools/make_themes_v4.py (art_*) сами содержат FPS-элементы
     left = sorted(f.name for f in THEMES.iterdir()
-                  if (f / "theme.json").exists() and f.name not in PLAN and f.name not in TEXT_PLAN)
+                  if (f / "theme.json").exists() and f.name not in PLAN and f.name not in TEXT_PLAN
+                  and not f.name.startswith("art_"))
     if left:
         raise SystemExit(f"без FPS остались: {left}")
     print("элементов FPS:", total)

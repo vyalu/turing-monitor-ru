@@ -65,6 +65,8 @@ class Settings:
     disk_index: int = 0
     sensor_overrides: dict[str, str] = field(default_factory=dict)
     hidden_blocks: dict[str, list[str]] = field(default_factory=dict)  # тема -> скрытые блоки («uptime», «net»…)
+    # замена показателей во всех темах: {было: стало}, например заполненность диска → его температура
+    metric_swaps: dict[str, str] = field(default_factory=lambda: {"disk.load": "disk.temp"})
     text_scales: dict[str, float] = field(default_factory=dict)   # тема -> масштаб подписей
     value_scales: dict[str, float] = field(default_factory=dict)  # тема -> масштаб показателей
 

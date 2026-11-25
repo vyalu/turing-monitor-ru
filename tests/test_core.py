@@ -493,3 +493,35 @@ def test_screen_reinit_once_after_start():
     assert e.display is not old and e._need_setup and e._reinit_at == 0.0
     e._check_reinit()  # второй раз — ничего
     assert e._reinit_at == 0.0
+
+
+def test_metric_swap():
+    from turmon.theme.swap import swap_widgets
+
+    ws = [{"type": "text", "id": "a", "text": "Диск {disk.load:.0f}% · {ram.load:.0f}%", "alert_above": 90},
+          {"type": "bar", "id": "b", "source": "disk.load", "min": 0.0, "max": 100.0, "alert_above": 90},
+          {"type": "text", "id": "c", "text": "{net.down:speed}"}]
+    out = swap_widgets(ws, {"disk.load": "disk.temp", "net.down": "gpu.power"})
+    assert out[0]["text"] == "Диск {disk.temp:.0f}° · {ram.load:.0f}%" and out[0]["alert_above"] == 68
+    assert out[1]["source"] == "disk.temp" and out[1]["min"] == 20.0 and out[1]["max"] == 80
+    assert out[2]["text"] == "{gpu.power:.0f}"
+    assert ws[0]["text"].startswith("Диск {disk.load")  # сама тема не меняется
+    assert not any("disk.load" in tj.read_text(encoding="utf-8") for tj in (ROOT / "themes").glob("*/theme.json"))
+
+
+def test_marquee_scrolls_long_title():
+    from turmon.theme import render as R
+
+    t = Theme(name="m", widgets=[{"type": "text", "id": "t", "x": 10, "y": 10, "width": 100, "size": 20,
+                                  "text": "{media.title}", "clip": True}])
+    v = {"media.title": "Очень длинное название трека, которое не влезает", "media.playing": 1}
+    r = Renderer(t)
+    a = r.render(v)
+    assert r.animating
+    r._marquee["t:0"] = (r._marquee["t:0"][0], r._marquee["t:0"][1] - R.MARQUEE_HOLD - 1.0)
+    b = r.render(v)
+    assert a.tobytes() != b.tobytes()  # строка сдвинулась
+    r2 = Renderer(t)
+    r2.render({**v, "media.playing": 0})
+    assert not r2.animating  # на паузе — обычное «…»
+    assert R.marquee_offset(0.5, 300) == 0 and R.marquee_offset(R.MARQUEE_HOLD + 1, 300) == R.MARQUEE_SPEED

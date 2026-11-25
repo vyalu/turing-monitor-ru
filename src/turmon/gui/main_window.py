@@ -725,6 +725,7 @@ SETTINGS_SECTIONS = (
     ("music", "Музыка", "«Сейчас играет» и режим плеера"),
     ("games", "Игры и перегрев", "FPS и предупреждения"),
     ("sensors", "Датчики", "Права, драйвер, выбор"),
+    ("swap", "Замена показателей", "Что показывать вместо чего"),
     ("device", "Подключение", "COM-порт мини-экрана"),
     ("about", "О программе", "Обновления и журнал"),
 )
@@ -939,7 +940,7 @@ class SettingsPage(QWidget):
             self.disk.addItem(d, d)
         self.disk.setCurrentIndex(max(0, self.disk.findData(self.s.disk)))
         self.disk.currentIndexChanged.connect(lambda: self._set("disk", self.disk.currentData(), True))
-        f.addRow("Диск (заполненность)", self.disk)
+        f.addRow("Диск", self.disk)
         self.overrides: dict[str, QComboBox] = {}
         for key, title, kind in (("cpu.temp", "Температура CPU", "Temperature"),
                                  ("gpu.temp", "Температура GPU", "Temperature"),
@@ -1169,12 +1170,81 @@ class SettingsPage(QWidget):
         sec["about"].addWidget(about)
         sec["about"].addWidget(g)
         self._build_auto(sec["auto"])
+        self._build_swaps(sec["swap"])
         for lay in sec.values():
             lay.addStretch(1)
         self.refresh_admin()
         QTimer.singleShot(1500, self._fill_sensors)
 
     # ---- смена тем ----
+    def _build_swaps(self, lay: QVBoxLayout) -> None:
+        lay.addWidget(hint("В любой теме можно показать другой показатель вместо ненужного — без редактора. "
+                           "Например, вместо заполненности диска — его температуру, вместо сети — мощность "
+                           "видеокарты. Правило действует сразу во всех темах, сами темы не меняются; "
+                           "единицы (%, °, ГБ) и шкалы полос подстраиваются сами."))
+        g = QGroupBox("Вместо → показывать")
+        self.swap_box = QVBoxLayout(g)
+        self.swap_box.setSpacing(6)
+        self.swap_rows: list[tuple[QWidget, QComboBox, QComboBox]] = []
+        lay.addWidget(g)
+        b = QPushButton("Добавить замену")
+        b.clicked.connect(lambda: self._add_swap_row("", ""))
+        row = QHBoxLayout()
+        row.addWidget(b)
+        row.addStretch(1)
+        lay.addLayout(row)
+        for frm, to in (self.s.metric_swaps or {}).items():
+            self._add_swap_row(frm, to)
+        if not self.swap_rows:
+            self._add_swap_row("", "")
+
+    def _add_swap_row(self, frm: str, to: str) -> None:
+        from ..theme.swap import choices
+
+        host = QWidget()
+        h = QHBoxLayout(host)
+        h.setContentsMargins(0, 0, 0, 0)
+        combos = []
+        for val, empty in ((frm, "— что заменить —"), (to, "— на что —")):
+            cb = QComboBox()
+            cb.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            cb.setMinimumContentsLength(14)
+            cb.addItem(empty, "")
+            group = None
+            for src in choices():
+                if src.group != group:
+                    group = src.group
+                    cb.insertSeparator(cb.count())
+                cb.addItem(f"{src.label}" + (f", {src.unit}" if src.unit else "") + f"   ({src.group})", src.key)
+            cb.setCurrentIndex(max(0, cb.findData(val)))
+            cb.currentIndexChanged.connect(self._save_swaps)
+            combos.append(cb)
+        h.addWidget(combos[0], 1)
+        h.addWidget(QLabel("→"))
+        h.addWidget(combos[1], 1)
+        rm = QPushButton("Убрать")
+        h.addWidget(rm)
+        entry = (host, combos[0], combos[1])
+        rm.clicked.connect(lambda: self._remove_swap_row(entry))
+        self.swap_rows.append(entry)
+        self.swap_box.addWidget(host)
+
+    def _remove_swap_row(self, entry) -> None:
+        if entry in self.swap_rows:
+            self.swap_rows.remove(entry)
+            entry[0].deleteLater()
+            self._save_swaps()
+
+    def _save_swaps(self) -> None:
+        swaps = {}
+        for _host, a, b in self.swap_rows:
+            frm, to = a.currentData(), b.currentData()
+            if frm and to and frm != to:
+                swaps[frm] = to
+        if swaps != (self.s.metric_swaps or {}):
+            self.s.metric_swaps = swaps
+            self.s.save()
+
     def _build_auto(self, lay: QVBoxLayout) -> None:
         lay.addWidget(hint("Мини-экран может сам менять тему. Если правил несколько, главнее игра, потом ночь, "
                            "потом «по очереди». Тему, выбранную вручную, программа показывает минуту, а потом "

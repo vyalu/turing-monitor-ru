@@ -18,7 +18,7 @@ from .sensors.system import SystemProvider
 from .sensors.volume import VolumeProvider
 from .sensors.weather import WeatherProvider
 from .theme.model import Theme
-from .theme.render import Renderer
+from .theme.render import MARQUEE_FPS, Renderer
 from . import themes as theme_lib
 
 log = logging.getLogger(__name__)
@@ -724,6 +724,7 @@ class Engine:
                     theme, renderer = self.theme, self.renderer
                 alert_busy = self._watch_alerts(raw)
                 self.smoother.set_target(raw, t0)
+            renderer.swaps = self.settings.metric_swaps or {}
             smooth = self.settings.smooth
             values = self.smoother.values(t0) if smooth else raw
             busy = alert_busy
@@ -782,6 +783,8 @@ class Engine:
                 wake_at = min(wake_at, t0 + 0.25)
             if page == "player" and anim_every:  # анимация пластинки: ровный темп кадров
                 wake_at = min(wake_at, t0 + anim_every)
+            if getattr(renderer, "animating", False):  # бегущая строка с названием трека
+                wake_at = min(wake_at, t0 + 1.0 / MARQUEE_FPS)
             self._precise_timer(wake_at - t0 < 0.15)
             self._wake.wait(max(0.01, wake_at - now))
             self._wake.clear()
