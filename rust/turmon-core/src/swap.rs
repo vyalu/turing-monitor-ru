@@ -125,7 +125,7 @@ pub fn swap_widget(w: &Widget, swaps: &HashMap<String, String>) -> Option<Widget
         if cur.str("source") == *frm {
             let mut n = cur.clone();
             n.0.insert("source".into(), json!(dst));
-            if matches!(n.kind(), "bar" | "arc" | "graph") {
+            if matches!(n.kind(), "bar" | "arc" | "graph" | "needle") {
                 n.0.insert("min".into(), json!(if to.unit == "°C" { 20.0 } else { to.min }));
                 n.0.insert("max".into(), json!(to.max));
             }

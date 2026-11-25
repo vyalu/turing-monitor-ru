@@ -117,6 +117,7 @@ impl Renderer {
                 "bar" => self.w_bar(&mut c, w, values),
                 "arc" => self.w_arc(&mut c, w, values),
                 "graph" => self.w_graph(&mut c, w, values, history),
+                "needle" => self.w_needle(&mut c, w, values),
                 "rect" => self.w_rect(&mut c, w),
                 "circle" => self.w_circle(&mut c, w),
                 "image" => self.w_image(&mut c, w),
@@ -360,6 +361,39 @@ impl Renderer {
         Some((x, y, x + bw, y + bh))
     }
 
+    /// Стрелка прибора (как _w_needle в render.py).
+    fn w_needle(&self, c: &mut Canvas, w: &Widget, values: &Values) -> Option<(f32, f32, f32, f32)> {
+        let x = w.num("x", 0.0) as f32 * SS;
+        let y = w.num("y", 0.0) as f32 * SS;
+        let size = w.num("size", 160.0) as f32 * SS;
+        let (cx, cy, r) = (x + size / 2.0, y + size / 2.0, size / 2.0);
+        let val = values.get(&w.str("source"));
+        let f = fraction(val, w.num("min", 0.0), w.num("max", 100.0));
+        let a = (w.num("start", -120.0) as f32 + w.num("sweep", 240.0) as f32 * f).to_radians();
+        let (dx, dy) = (a.sin(), -a.cos());
+        let ln = r * w.num("length", 88.0) as f32 / 100.0;
+        let tl = r * w.num("tail", 14.0) as f32 / 100.0;
+        let half = (w.num("width", 4.0) as f32).max(0.5) * SS / 2.0;
+        let tip = (cx + dx * ln, cy + dy * ln);
+        let back = (cx - dx * tl, cy - dy * tl);
+        let (px, py) = (-dy * half, dx * half);
+        let pts = [tip, (cx + px, cy + py), (back.0 + px * 0.6, back.1 + py * 0.6),
+                   (back.0 - px * 0.6, back.1 - py * 0.6), (cx - px, cy - py)];
+        let col = Self::alert(w, val, w.color("color").or(Some(Rgba(255, 77, 45, 255)))).unwrap();
+        if w.flag("shadow", true) {
+            let o = 2.0 * SS;
+            let sh: Vec<(f32, f32)> = pts.iter().map(|p| (p.0 + o, p.1 + o)).collect();
+            c.polygon(&sh, Rgba(0, 0, 0, 90));
+        }
+        c.polygon(&pts, col);
+        let hub = w.num("hub", 12.0) as f32 * SS;
+        if hub > 0.0 {
+            let hc = w.color("hub_color").unwrap_or(Rgba(26, 26, 26, 255));
+            c.oval(cx - hub / 2.0, cy - hub / 2.0, cx + hub / 2.0, cy + hub / 2.0, Some(hc), None, 0.0);
+        }
+        Some((x, y, x + size, y + size))
+    }
+
     fn w_arc(&self, c: &mut Canvas, w: &Widget, values: &Values) -> Option<(f32, f32, f32, f32)> {
         let (x, y) = (w.num("x", 0.0) as f32 * SS, w.num("y", 0.0) as f32 * SS);
         let size = w.num("size", 100.0) as f32 * SS;
@@ -586,5 +620,20 @@ mod marquee_tests {
         assert!(!r2.animating);
         assert_eq!(marquee_offset(0.5, 300.0), 0.0);
         assert_eq!(marquee_offset(MARQUEE_HOLD + 1.0, 300.0), MARQUEE_SPEED);
+    }
+
+    #[test]
+    fn needle_points_by_value() {
+        let t = Theme::from_json(&json!({"name": "n", "widgets": [{"type": "needle", "id": "n", "x": 0, "y": 0,
+            "size": 100, "source": "cpu.load", "start": -90.0, "sweep": 180.0}]}), None);
+        let red = |img: &image::RgbImage, x0: u32, x1: u32| {
+            (x0..x1).flat_map(|x| (46..54).map(move |y| (x, y))).map(|(x, y)| img.get_pixel(x, y)[0]).max().unwrap()
+        };
+        let mut v = Values::new();
+        v.insert("cpu.load".into(), Val::Int(0));
+        let lo = Renderer::new(t.clone(), 1.0, 1.0, "main").render(&v, &History::new(), None);
+        v.insert("cpu.load".into(), Val::Int(100));
+        let hi = Renderer::new(t, 1.0, 1.0, "main").render(&v, &History::new(), None);
+        assert!(red(&lo, 10, 30) > 200 && red(&hi, 70, 90) > 200 && red(&lo, 70, 90) < 60);
     }
 }

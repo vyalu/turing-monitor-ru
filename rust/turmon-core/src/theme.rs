@@ -22,6 +22,9 @@ fn defaults(kind: &str) -> Value {
             "min": 0.0, "max": 100.0, "color": "#4FC3F7", "color2": "", "bg": "#FFFFFF22", "round": true}),
         "graph" => json!({"w": 200, "h": 60, "source": "cpu.load", "min": 0.0, "max": 100.0, "points": 60,
             "color": "#4FC3F7", "fill": "#4FC3F744", "line": 2.0, "bg": "", "style": "line"}),
+        "needle" => json!({"size": 160, "start": -120.0, "sweep": 240.0, "source": "cpu.load", "min": 0.0,
+            "max": 100.0, "length": 88, "tail": 14, "width": 4.0, "color": "#FF4D2D", "hub": 12,
+            "hub_color": "#1A1A1A", "shadow": true}),
         "rect" => json!({"w": 100, "h": 60, "color": "#FFFFFF14", "border": "", "border_width": 1, "radius": 10}),
         "circle" => json!({"size": 60, "color": "#FFFFFF14", "border": "", "border_width": 1}),
         "image" => json!({"path": "", "w": 0, "h": 0, "opacity": 100}),
@@ -32,7 +35,7 @@ fn defaults(kind: &str) -> Value {
         _ => json!({}),
     };
     let m = d.as_object_mut().unwrap();
-    if matches!(kind, "text" | "bar" | "arc") {
+    if matches!(kind, "text" | "bar" | "arc" | "needle") {
         for (k, v) in alert.as_object().unwrap() {
             m.insert(k.clone(), v.clone());
         }
