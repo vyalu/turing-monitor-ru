@@ -45,6 +45,7 @@ WIDGETS: dict[str, dict[str, Any]] = {
             Field("align", "Выравнивание", "choice", "left", ALIGN),
             Field("width", "Ширина поля (0 = авто)", "int", 0, lo=0, hi=2000),
             Field("clip", "Обрезать «…», если не влезает в ширину", "bool", False),
+            Field("marquee", "Бегущая строка для трека, если не влезает в ширину", "bool", True),
             Field("line_spacing", "Межстрочный интервал", "float", 1.15, lo=0.5, hi=4),
             Field("shadow", "Тень", "bool", False),
             Field("shadow_color", "Цвет тени", "color", "#000000AA"),

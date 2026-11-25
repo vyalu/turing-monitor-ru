@@ -1147,7 +1147,7 @@
       "visible": true,
       "x": 464,
       "y": 284,
-      "text": "Диск {disk.load:.0f}%",
+      "text": "Диск {disk.temp:.0f}°",
       "font": "Roboto-Medium",
       "size": 12,
       "color": "#9AA4B2",

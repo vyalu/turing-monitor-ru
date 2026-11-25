@@ -11,7 +11,7 @@ import time as _time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from . import fonts
 from .icons import draw_weather_icon
@@ -88,6 +88,17 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
 
 
 SPIN_SPEED = 24.0   # градусов в секунду: медленно, чтобы шаг между кадрами был маленьким
+MARQUEE_SPEED = 30.0  # бегущая строка: точек экрана в секунду
+MARQUEE_HOLD = 2.0    # секунд стоим в начале, чтобы успеть прочитать
+MARQUEE_GAP = 40      # промежуток между концом названия и его повтором, точек экрана
+MARQUEE_FPS = 20      # кадров в секунду, пока строка бежит
+
+
+def marquee_offset(elapsed: float, length: float) -> float:
+    """Сдвиг бегущей строки (в точках экрана): пауза в начале, потом плавно влево по кругу."""
+    run = (length + MARQUEE_GAP) / MARQUEE_SPEED
+    phase = elapsed % (MARQUEE_HOLD + run)
+    return max(0.0, phase - MARQUEE_HOLD) * MARQUEE_SPEED
 
 
 class Renderer:
@@ -104,6 +115,9 @@ class Renderer:
         self.bboxes: dict[str, BBox] = {}
         self._bg_key: tuple | None = None
         self._bg: Image.Image | None = None
+        self.swaps: dict[str, str] = {}  # замена показателей из настроек («вместо X показывать Y»)
+        self.animating = False  # в кадре есть бегущая строка — движку нужны частые кадры
+        self._marquee: dict[str, tuple[str, float]] = {}  # элемент → (текст, когда начали показывать)
 
     # ---- фон ----
     def page_data(self) -> dict[str, Any]:
@@ -140,7 +154,10 @@ class Renderer:
         history = history or {}
         canvas = self._background()
         self.bboxes = {}
-        for w in self.page_data()["widgets"]:
+        self.animating = False
+        from .swap import swap_widgets
+
+        for w in swap_widgets(self.page_data()["widgets"], self.swaps):
             if not w.get("visible", True) or (skip and w.get("id") in skip):
                 continue
             cond = w.get("show_if")
@@ -208,9 +225,19 @@ class Renderer:
         x0 = y0 = 1e9
         x1 = y1 = -1e9
         clip = bool(w.get("clip")) and width > 0
+        # название трека, которое не влезает, во время игры музыки медленно уезжает влево
+        marquee = (width > 0 and w.get("marquee", True) and "{media." in str(w.get("text", ""))
+                   and bool(values.get("media.playing")) and bool(values.get("media.title")))
         for i, line in enumerate(lines):
             parts = fonts.runs(line, fname, size * SS)
             lw = sum(d.textlength(t, font=f) for t, f in parts)
+            if marquee and lw > width:
+                ly = y + i * line_h
+                self._draw_marquee(img, f"{w.get('id')}:{i}", line, parts, lw, x, ly, width,
+                                   asc, desc, color, shadow)
+                x0, y0 = min(x0, x), min(y0, ly)
+                x1, y1 = max(x1, x + width), max(y1, ly + asc + desc)
+                continue
             if clip and lw > width:
                 while line and lw > width:
                     line = line[:-1].rstrip()
@@ -233,6 +260,45 @@ class Renderer:
         if width > 0:
             x0, x1 = min(x0, x), max(x1, x + width)
         return (x0, y0, x1, y1)
+
+    def _draw_marquee(self, img: Image.Image, key: str, line: str, parts, lw: float, x: float, ly: float,
+                      width: float, asc: int, desc: int, color, shadow) -> None:
+        now = _time.monotonic()
+        prev = self._marquee.get(key)
+        if prev is None or prev[0] != line:  # новый трек — снова с начала, с паузой
+            prev = (line, now)
+            self._marquee[key] = prev
+        off = marquee_offset(now - prev[1], lw / SS) * SS
+        if off > 0:
+            self.animating = True
+        elif now - prev[1] < MARQUEE_HOLD + 0.5:
+            self.animating = True  # скоро поедет — заранее переходим на частые кадры
+        pad = 3 * SS
+        lay_w, lay_h = int(math.ceil(width)), int(asc + desc + pad * 2)
+        lay = Image.new("RGBA", (lay_w, lay_h), (0, 0, 0, 0))
+        ld = ImageDraw.Draw(lay)
+        base = pad + asc
+        for start in (-off, -off + lw + MARQUEE_GAP * SS):
+            if start > lay_w or start + lw < 0:
+                continue
+            cx = start
+            for t, f in parts:
+                if shadow:
+                    ld.text((cx + SS * 1.5, base + SS * 1.5), t, font=f, fill=shadow, anchor="ls")
+                ld.text((cx, base), t, font=f, fill=color, anchor="ls")
+                cx += ld.textlength(t, font=f)
+        # мягкие края: текст не обрывается резко
+        fade = min(12 * SS, lay_w // 4)
+        mask = Image.new("L", (lay_w, 1), 255)
+        px = mask.load()
+        for k in range(fade):
+            a = int(255 * (k + 0.5) / fade)
+            px[lay_w - 1 - k, 0] = a
+            if off > 0:
+                px[k, 0] = a
+        alpha = ImageChops.multiply(lay.getchannel("A"), mask.resize((lay_w, lay_h)))
+        lay.putalpha(alpha)
+        img.paste(lay, (int(round(x)), int(round(ly - pad))), lay)
 
     @staticmethod
     def _gradient(size: tuple[int, int], c1: Color, c2: Color | None, vertical: bool) -> Image.Image:

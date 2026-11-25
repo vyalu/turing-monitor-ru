@@ -1,3 +1,3 @@
 """Turing Monitor RU — программа для мини-экранов Turing Smart Screen."""
 
-__version__ = "1.9.2"
+__version__ = "1.10.0"
