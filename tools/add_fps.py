@@ -145,10 +145,10 @@ if __name__ == "__main__":
             n = apply(f)
             total += n
             print(f"{f.name}: {n}")
-    # темы tools/make_themes_v4.py (art_*) сами содержат FPS-элементы
+    # темы make_themes_v4/v5 (art_*, lnd_*) сами содержат FPS-элементы
     left = sorted(f.name for f in THEMES.iterdir()
                   if (f / "theme.json").exists() and f.name not in PLAN and f.name not in TEXT_PLAN
-                  and not f.name.startswith("art_"))
+                  and not f.name.startswith(("art_", "lnd_")))
     if left:
         raise SystemExit(f"без FPS остались: {left}")
     print("элементов FPS:", total)

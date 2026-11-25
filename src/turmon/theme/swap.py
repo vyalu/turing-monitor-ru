@@ -60,7 +60,7 @@ def swap_widget(w: dict[str, Any], swaps: dict[str, str]) -> dict[str, Any]:
         if w.get("source") == frm:
             out = out or dict(w)
             out["source"] = dst
-            if out.get("type") in ("bar", "arc", "graph"):
+            if out.get("type") in ("bar", "arc", "graph", "needle"):
                 out["min"] = 20.0 if to.unit == "°C" else to.min
                 out["max"] = to.max
             if out.get("alert_above") not in (None, ""):

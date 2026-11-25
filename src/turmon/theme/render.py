@@ -450,6 +450,33 @@ class Renderer:
             img.paste(lay, (ox, oy), lay)
         return (x, y, x + size, y + size)
 
+    def _w_needle(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
+        x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
+        size = num(w.get("size"), 160) * SS
+        cx, cy, r = x + size / 2, y + size / 2, size / 2
+        val = values.get(w.get("source"))
+        f = fraction(val, w.get("min"), w.get("max"))
+        a = math.radians(num(w.get("start"), -120) + num(w.get("sweep"), 240) * f)
+        dx, dy = math.sin(a), -math.cos(a)  # 0° — вверх, по часовой
+        ln, tl = r * num(w.get("length"), 88) / 100, r * num(w.get("tail"), 14) / 100
+        half = max(0.5, num(w.get("width"), 4)) * SS / 2
+        tip = (cx + dx * ln, cy + dy * ln)
+        back = (cx - dx * tl, cy - dy * tl)
+        px, py = -dy * half, dx * half
+        pts = [tip, (cx + px, cy + py), (back[0] + px * 0.6, back[1] + py * 0.6),
+               (back[0] - px * 0.6, back[1] - py * 0.6), (cx - px, cy - py)]
+        color = self._alert(w, val, parse_color(w.get("color"), (255, 77, 45, 255)))
+        d = ImageDraw.Draw(img, "RGBA")
+        if w.get("shadow", True):
+            o = 2 * SS
+            d.polygon([(p0 + o, p1 + o) for p0, p1 in pts], fill=(0, 0, 0, 90))
+        d.polygon(pts, fill=color)
+        hub = num(w.get("hub"), 12) * SS
+        if hub > 0:
+            hc = parse_color(w.get("hub_color"), (26, 26, 26, 255))
+            d.ellipse((cx - hub / 2, cy - hub / 2, cx + hub / 2, cy + hub / 2), fill=hc)
+        return (x, y, x + size, y + size)
+
     def _w_graph(self, img: Image.Image, w: dict, values: dict, history: dict) -> BBox:
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
         gw, gh = num(w.get("w"), 200) * SS, num(w.get("h"), 60) * SS

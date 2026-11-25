@@ -171,16 +171,24 @@ class HomePage(QWidget):
         b_folder.clicked.connect(lambda: winsys.open_path(user_themes()))
         top.addWidget(b_folder)
         rl.addLayout(top)
-        rl.addWidget(label("Нажмите на тему, чтобы вывести её на экран. Двойной щелчок — редактировать.",
-                           "muted"))
+        hl = QHBoxLayout()
+        hl.addWidget(label("Нажмите на тему, чтобы вывести её на экран. Двойной щелчок — редактировать.",
+                           "muted"), 1)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Поиск по названию")
+        self.search.setClearButtonEnabled(True)
+        self.search.setFixedWidth(220)
+        hl.addWidget(self.search)
+        rl.addLayout(hl)
 
         filters = QHBoxLayout()
         self.sections = QTabBar()
         self.sections.setObjectName("seg")
         self.sections.setExpanding(False)
         self.sections.setDrawBase(False)
-        for t in ("Встроенные", "Мои", "Из TURZX"):
+        for t in ("★", "Встроенные", "Мои", "Из TURZX"):
             self.sections.addTab(t)
+        self.sections.setTabToolTip(0, "Избранные темы (правая кнопка по теме → «В избранное»)")
         self.sections.currentChanged.connect(lambda _i: self._fill_gallery())
         filters.addWidget(self.sections)
         filters.addStretch(1)
@@ -191,6 +199,7 @@ class HomePage(QWidget):
         for t in ("Все", "Альбомные", "Портретные"):
             self.orient.addTab(t)
         self.orient.currentChanged.connect(lambda _i: self._fill_gallery())
+        self.search.textChanged.connect(lambda _t: self._fill_gallery())
         filters.addWidget(self.orient)
         rl.addLayout(filters)
         self._thumbs: list[tuple] = []
@@ -204,6 +213,7 @@ class HomePage(QWidget):
         self.gallery.setMovement(QListView.Static)
         self.gallery.setWordWrap(True)
         self.gallery.itemClicked.connect(self._choose)
+        self.gallery.currentItemChanged.connect(lambda *_a: self._sync_fav_button())
         self.gallery.itemDoubleClicked.connect(lambda it: self.edit_requested.emit(it.data(Qt.UserRole)))
         self.gallery.setContextMenuPolicy(Qt.CustomContextMenu)
         self.gallery.customContextMenuRequested.connect(self._menu)
@@ -220,6 +230,10 @@ class HomePage(QWidget):
         self.b_del.clicked.connect(self._delete)
         btns.addWidget(b_edit)
         btns.addWidget(b_dup)
+        self.b_fav = QPushButton("★ В избранное")
+        self.b_fav.setToolTip("Избранные темы показываются первыми и в разделе «★ Избранные»")
+        self.b_fav.clicked.connect(lambda: self.toggle_favorite(self._current_id()))
+        btns.addWidget(self.b_fav)
         b_exp = QPushButton("Экспорт в файл…")
         b_exp.setToolTip("Сохранить тему вместе с картинками в один файл .tmtheme, чтобы поделиться")
         b_exp.clicked.connect(self.export_pack)
@@ -232,9 +246,10 @@ class HomePage(QWidget):
         self.reload_gallery()
 
     # ---- галерея ----
-    SECTION_KEYS = ("builtin", "user", "imported")
-    SECTION_NAMES = ("Встроенные", "Мои", "Из TURZX")
+    SECTION_KEYS = ("fav", "builtin", "user", "imported")
+    SECTION_NAMES = ("★", "Встроенные", "Мои", "Из TURZX")
     EMPTY_TEXT = {
+        "fav": "Здесь будут избранные темы. Нажмите на тему правой кнопкой → «В избранное».",
         "user": "Здесь будут ваши темы. Сделайте копию любой встроенной темы или нажмите «Новая» в редакторе.",
         "imported": "Здесь будут темы из TURZX. Нажмите «Импорт из TURZX…» и выберите файлы *.data.",
     }
@@ -270,11 +285,13 @@ class HomePage(QWidget):
             self._thumb_timer.timeout.connect(self._render_some_thumbs)
         if self._thumb_queue:
             self._thumb_timer.start(0)
-        counts = {key: sum(1 for e, _ in self._thumbs if e.section == key) for key in self.SECTION_KEYS}
+        favs = set(self.engine.settings.favorite_themes)
+        counts = {key: sum(1 for e, _ in self._thumbs if (e.id in favs if key == "fav" else e.section == key))
+                  for key in self.SECTION_KEYS}
         for i, (key, name) in enumerate(zip(self.SECTION_KEYS, self.SECTION_NAMES)):
             self.sections.setTabText(i, f"{name}  {counts[key]}")
         cur = next((e for e, _ in self._thumbs if e.id == self.engine.settings.theme), None)
-        want = self.SECTION_KEYS.index(cur.section) if cur else 0
+        want = (0 if cur.id in favs else self.SECTION_KEYS.index(cur.section)) if cur else 1
         if self.sections.currentIndex() != want and getattr(self, "_follow_current", True):
             self.sections.blockSignals(True)
             self.sections.setCurrentIndex(want)
@@ -374,27 +391,48 @@ class HomePage(QWidget):
         else:
             self.gallery.setSpacing(0)
             self.gallery.setGridSize(QSize(THUMB + 26, (THUMB * 2 // 3 if orient == 1 else THUMB) + 50))
-        items = [(e, ic) for e, ic in self._thumbs if e.section == key
-                 and (orient == 0 or e.landscape == (orient == 1))]
-        if orient == 0:  # сначала альбомные, потом портретные — ряды без пустот
-            items.sort(key=lambda x: not x[0].landscape)
+        favs = set(self.engine.settings.favorite_themes)
+        query = self.search.text().strip().lower() if hasattr(self, "search") else ""
+        items = [(e, ic) for e, ic in self._thumbs if (e.id in favs if key == "fav" else e.section == key)
+                 and (orient == 0 or e.landscape == (orient == 1))
+                 and (not query or query in e.name.lower())]
+        # избранные — первыми; в общем списке сначала альбомные, потом портретные — ряды без пустот
+        items.sort(key=lambda x: (x[0].id not in favs, orient == 0 and not x[0].landscape))
         for e, icon in items:
-            it = QListWidgetItem(icon, e.name.replace(" (TURZX)", ""))
+            it = QListWidgetItem(icon, ("★ " if e.id in favs and key != "fav" else "") + e.name.replace(" (TURZX)", ""))
             if orient == 0:
                 it.setSizeHint(QSize(THUMB + 18, (THUMB * 2 // 3 if e.landscape else THUMB) + 40))
             it.setData(Qt.UserRole, e.id)
-            kind = {"builtin": "Встроенная тема", "user": "Ваша тема", "imported": "Импорт из TURZX"}[key]
+            kind = {"builtin": "Встроенная тема", "user": "Ваша тема", "imported": "Импорт из TURZX"}[e.section]
             it.setToolTip(kind + (", альбомная" if e.landscape else ", портретная"))
             self.gallery.addItem(it)
             if e.id == cur:
                 self.gallery.setCurrentItem(it)
         if not items:
-            text = self.EMPTY_TEXT.get(key, "") if orient == 0 else "В этом разделе нет тем такой ориентации."
+            text = ("Ничего не нашлось." if query else
+                    self.EMPTY_TEXT.get(key, "") if orient == 0 else "В этом разделе нет тем такой ориентации.")
             it = QListWidgetItem(text)
             it.setFlags(Qt.NoItemFlags)
             it.setSizeHint(QSize(600, 80))
             self.gallery.addItem(it)
-        self.b_del.setEnabled(key != "builtin")
+        self.b_del.setEnabled(key not in ("builtin", "fav"))
+        self._sync_fav_button()
+
+    def _sync_fav_button(self) -> None:
+        if hasattr(self, "b_fav"):
+            fav = self._current_id() in self.engine.settings.favorite_themes
+            self.b_fav.setText("Убрать из избранного" if fav else "★ В избранное")
+
+    def toggle_favorite(self, tid: str) -> None:
+        s = self.engine.settings
+        favs = list(s.favorite_themes)
+        if tid in favs:
+            favs.remove(tid)
+        else:
+            favs.append(tid)
+        s.favorite_themes = favs
+        s.save()
+        self.reload_gallery()
 
     def _current_id(self) -> str:
         it = self.gallery.currentItem()
@@ -500,7 +538,10 @@ class HomePage(QWidget):
         m.addAction("Редактировать", self._edit_current)
         m.addAction("Сделать копию", self._duplicate)
         m.addAction("Экспорт в файл…", self.export_pack)
-        if str(it.data(Qt.UserRole)).startswith("user:"):
+        tid = str(it.data(Qt.UserRole))
+        fav = tid in self.engine.settings.favorite_themes
+        m.addAction("Убрать из избранного" if fav else "★ В избранное", lambda: self.toggle_favorite(tid))
+        if tid.startswith("user:"):
             m.addSeparator()
             m.addAction("Удалить", self._delete)
         m.exec(self.gallery.mapToGlobal(pos))
@@ -1277,6 +1318,26 @@ class SettingsPage(QWidget):
         self.rot_sec.valueChanged.connect(save_rot)
         self.rot_list.itemChanged.connect(save_rot)
         self.rot_list.model().rowsMoved.connect(save_rot)
+
+        def pick_favorites() -> None:
+            favs = [t for t in self.s.favorite_themes if t in names]
+            if not favs:
+                QMessageBox.information(self, "Избранные темы", "Избранных тем пока нет. На вкладке «Экран и темы» "
+                                        "нажмите на тему правой кнопкой → «В избранное».")
+                return
+            self.rot_list.blockSignals(True)
+            for i in range(self.rot_list.count()):
+                it = self.rot_list.item(i)
+                it.setCheckState(Qt.Checked if it.data(Qt.UserRole) in favs else Qt.Unchecked)
+            self.rot_list.blockSignals(False)
+            save_rot()
+        b_fav = QPushButton("Отметить избранные")
+        b_fav.setToolTip("Листать только темы со звёздочкой")
+        b_fav.clicked.connect(pick_favorites)
+        rb = QHBoxLayout()
+        rb.addWidget(b_fav)
+        rb.addStretch(1)
+        v.addLayout(rb)
 
         # ночью
         g = QGroupBox("Ночью — другая тема")

@@ -525,3 +525,16 @@ def test_marquee_scrolls_long_title():
     r2.render({**v, "media.playing": 0})
     assert not r2.animating  # на паузе — обычное «…»
     assert R.marquee_offset(0.5, 300) == 0 and R.marquee_offset(R.MARQUEE_HOLD + 1, 300) == R.MARQUEE_SPEED
+
+
+def test_needle_widget():
+    from turmon.theme.model import new_widget
+
+    w = new_widget("needle", x=0, y=0, size=100, source="cpu.load", min=0, max=100, start=-90, sweep=180)
+    t = Theme(name="n", widgets=[w])
+    lo = Renderer(t).render({"cpu.load": 0})
+    hi = Renderer(t).render({"cpu.load": 100})
+    # 0% — стрелка смотрит влево, 100% — вправо
+    red = lambda im, box: max(im.crop(box).getchannel("R").tobytes())  # noqa: E731
+    assert red(lo, (10, 46, 30, 54)) > 200 and red(hi, (70, 46, 90, 54)) > 200
+    assert red(lo, (70, 46, 90, 54)) < 60
