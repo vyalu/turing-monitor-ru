@@ -14,6 +14,18 @@ use crate::values::{self, History, Val, Values};
 
 pub const SS: f32 = 2.0;
 pub const SPIN_SPEED: f64 = 24.0;
+/// Бегущая строка с названием трека (как в render.py): скорость, пауза в начале, промежуток, кадры/с.
+pub const MARQUEE_SPEED: f64 = 30.0;
+pub const MARQUEE_HOLD: f64 = 2.0;
+pub const MARQUEE_GAP: f64 = 40.0;
+pub const MARQUEE_FPS: f64 = 20.0;
+
+/// Сдвиг бегущей строки в точках экрана: пауза в начале, потом плавно влево по кругу.
+pub fn marquee_offset(elapsed: f64, length: f64) -> f64 {
+    let run = (length + MARQUEE_GAP) / MARQUEE_SPEED;
+    let phase = elapsed % (MARQUEE_HOLD + run);
+    (phase - MARQUEE_HOLD).max(0.0) * MARQUEE_SPEED
+}
 
 pub type BBox = (i32, i32, i32, i32);
 
@@ -35,12 +47,18 @@ pub struct Renderer {
     bg: Option<(String, Pixmap)>,
     auto_player: Option<Page>,
     clock: Instant,
+    /// замена показателей из настроек
+    pub swaps: HashMap<String, String>,
+    /// в кадре бегущая строка — нужны частые кадры
+    pub animating: bool,
+    marquee: HashMap<String, (String, f64)>,
 }
 
 impl Renderer {
     pub fn new(theme: Theme, label_scale: f32, value_scale: f32, page: &str) -> Renderer {
         Renderer { theme, page: page.into(), label_scale, value_scale, bboxes: HashMap::new(), bg: None,
-                   auto_player: None, clock: Instant::now() }
+                   auto_player: None, clock: Instant::now(), swaps: HashMap::new(), animating: false,
+                   marquee: HashMap::new() }
     }
 
     /// Фон и элементы текущей страницы; страница плеера без своей разметки собирается сама.
@@ -79,7 +97,9 @@ impl Renderer {
     pub fn render(&mut self, values: &Values, history: &History, skip: Option<&HashSet<String>>) -> image::RgbImage {
         let mut c = self.background();
         self.bboxes.clear();
-        let widgets = self.page_data().widgets.clone();
+        self.animating = false;
+        let swaps = self.swaps.clone();
+        let widgets = crate::swap::swap_widgets(&self.page_data().widgets, &swaps);
         for w in &widgets {
             if !w.visible() || skip.is_some_and(|s| s.contains(w.id())) {
                 continue;
@@ -123,7 +143,7 @@ impl Renderer {
         base
     }
 
-    fn w_text(&self, c: &mut Canvas, w: &Widget, values: &Values) -> Option<(f32, f32, f32, f32)> {
+    fn w_text(&mut self, c: &mut Canvas, w: &Widget, values: &Values) -> Option<(f32, f32, f32, f32)> {
         let src = w.str("text");
         let text = values::render_template(&src, values);
         if text.is_empty() {
@@ -155,11 +175,25 @@ impl Renderer {
             None
         };
         let clip = w.flag("clip", false) && width > 0.0;
+        // название трека, которое не влезает, во время игры музыки медленно уезжает влево
+        let marquee = width > 0.0 && w.flag("marquee", true) && src.contains("{media.")
+            && values::present(values, "media.title")
+            && values.get("media.playing").and_then(|v| v.as_f64()).is_some_and(|p| p != 0.0);
         let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
         for (i, line) in text.split('\n').enumerate() {
             let mut line = line.to_string();
             let mut parts = fonts::runs(&line, &fname);
             let mut lw = fonts::runs_width(&parts, px);
+            if marquee && lw > width {
+                let ly = y + i as f32 * line_h;
+                let key = format!("{}:{}", w.id(), i);
+                self.draw_marquee(c, &key, &line, &parts, lw, x, ly, width, asc, desc, px, col, shadow);
+                x0 = x0.min(x);
+                y0 = y0.min(ly);
+                x1 = x1.max(x + width);
+                y1 = y1.max(ly + asc + desc);
+                continue;
+            }
             if clip && lw > width {
                 while !line.is_empty() && lw > width {
                     line.pop();
@@ -193,6 +227,60 @@ impl Renderer {
             x1 = x1.max(x + width);
         }
         Some((x0, y0, x1, y1))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_marquee(&mut self, c: &mut Canvas, key: &str, line: &str, parts: &[(String, ab_glyph::FontArc)], lw: f32,
+                    x: f32, ly: f32, width: f32, asc: f32, desc: f32, px: f32, col: Rgba, shadow: Option<Rgba>) {
+        let now = self.clock.elapsed().as_secs_f64();
+        let start = match self.marquee.get(key) {
+            Some((t, s)) if t == line => *s,
+            _ => {
+                self.marquee.insert(key.to_string(), (line.to_string(), now));
+                now
+            }
+        };
+        let off = (marquee_offset(now - start, (lw / SS) as f64) * SS as f64) as f32;
+        if off > 0.0 || now - start < MARQUEE_HOLD + 0.5 {
+            self.animating = true;
+        }
+        let pad = 3.0 * SS;
+        let (lay_w, lay_h) = (width.ceil().max(1.0) as u32, (asc + desc + pad * 2.0).ceil().max(1.0) as u32);
+        let mut lay = Canvas::new(lay_w, lay_h, Rgba(0, 0, 0, 0));
+        let base = pad + asc;
+        for s0 in [-off, -off + lw + MARQUEE_GAP as f32 * SS] {
+            if s0 > lay_w as f32 || s0 + lw < 0.0 {
+                continue;
+            }
+            let mut cx = s0;
+            for (t, f) in parts {
+                if let Some(sc) = shadow {
+                    lay.text(f, px, cx + SS * 1.5, base + SS * 1.5, t, sc);
+                }
+                cx += lay.text(f, px, cx, base, t, col);
+            }
+        }
+        // мягкие края
+        let fade = (12.0 * SS).min(lay_w as f32 / 4.0) as u32;
+        if fade > 0 {
+            let data = lay.pm.data_mut();
+            for yy in 0..lay_h {
+                for k in 0..fade {
+                    let a = (k as f32 + 0.5) / fade as f32;
+                    let mut cols = vec![lay_w - 1 - k];
+                    if off > 0.0 {
+                        cols.push(k);
+                    }
+                    for xx in cols {
+                        let i = ((yy * lay_w + xx) * 4) as usize;
+                        for ch in 0..4 {
+                            data[i + ch] = (data[i + ch] as f32 * a).round() as u8;
+                        }
+                    }
+                }
+            }
+        }
+        c.image(&lay.pm, x.round(), (ly - pad).round(), 1.0, None);
     }
 
     fn gradient(c1: Rgba, c2: Option<Rgba>, x: f32, y: f32, w: f32, h: f32, vertical: bool) -> Shader<'static> {
@@ -470,5 +558,33 @@ impl Renderer {
 impl Page {
     fn clone_header(&self) -> (String, String) {
         (self.background.clone(), self.background_image.clone())
+    }
+}
+
+#[cfg(test)]
+mod marquee_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn long_title_scrolls_only_while_playing() {
+        let t = Theme::from_json(&json!({"name": "m", "widgets": [{"type": "text", "id": "t", "x": 10, "y": 10,
+            "width": 100, "size": 20, "text": "{media.title}", "clip": true}]}), None);
+        let mut v = Values::new();
+        v.insert("media.title".into(), Val::Str("Очень длинное название трека, которое не влезает".into()));
+        v.insert("media.playing".into(), Val::Int(1));
+        let mut r = Renderer::new(t.clone(), 1.0, 1.0, "main");
+        let a = r.render(&v, &History::new(), None);
+        assert!(r.animating);
+        let (line, start) = r.marquee["t:0"].clone();
+        r.marquee.insert("t:0".into(), (line, start - MARQUEE_HOLD - 1.0));
+        let b = r.render(&v, &History::new(), None);
+        assert_ne!(a.as_raw(), b.as_raw());
+        v.insert("media.playing".into(), Val::Int(0));
+        let mut r2 = Renderer::new(t, 1.0, 1.0, "main");
+        r2.render(&v, &History::new(), None);
+        assert!(!r2.animating);
+        assert_eq!(marquee_offset(0.5, 300.0), 0.0);
+        assert_eq!(marquee_offset(MARQUEE_HOLD + 1.0, 300.0), MARQUEE_SPEED);
     }
 }

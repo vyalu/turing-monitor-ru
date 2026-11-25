@@ -17,6 +17,7 @@ pub mod config;
 pub mod smooth;
 pub mod overlay;
 pub mod sources;
+pub mod swap;
 pub mod blocks;
 pub mod engine;
 pub mod platform;

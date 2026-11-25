@@ -684,7 +684,11 @@ impl Engine {
                 values.retain(|k, _| !k.starts_with("fps."));
             }
             let skip = if page == "main" && !i.hidden.is_empty() { Some(i.hidden.clone()) } else { None };
+            if i.renderer.swaps != s.metric_swaps {
+                i.renderer.swaps = s.metric_swaps.clone();
+            }
             let mut frame = i.renderer.render(&values, &history, skip.as_ref());
+            let marquee = i.renderer.animating;
             let mut busy = alert_busy;
             if s.media_toast && page != "player" && track_changed_at > 6.0 {
                 let age = t0 - track_changed_at;
@@ -739,6 +743,9 @@ impl Engine {
             }
             if busy {
                 wake_at = wake_at.min(t0 + 0.25);
+            }
+            if marquee {
+                wake_at = wake_at.min(t0 + 1.0 / crate::render::MARQUEE_FPS);
             }
             if anim_every > 0.0 {
                 wake_at = wake_at.min(t0 + anim_every);
