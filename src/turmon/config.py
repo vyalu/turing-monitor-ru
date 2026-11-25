@@ -18,7 +18,6 @@ class Settings:
     brightness: int = 60
     flip: bool = False                   # экран установлен вверх ногами
     chunk: int = 0                       # размер пакета записи (0 = авто)
-    fps_limit: float = 2.0               # (устарело) раньше — кадров в секунду
     smooth: bool = True                  # плавные переходы значений
     anim_fps: int = 12                   # кадров в секунду во время перехода
     settings_rev: int = 1                # версия формата настроек (для переноса старых значений)
@@ -64,6 +63,7 @@ class Settings:
     disk: str = ""
     disk_index: int = 0
     sensor_overrides: dict[str, str] = field(default_factory=dict)
+    favorite_themes: list[str] = field(default_factory=list)  # «★ Избранные» в галерее
     hidden_blocks: dict[str, list[str]] = field(default_factory=dict)  # тема -> скрытые блоки («uptime», «net»…)
     # замена показателей во всех темах: {было: стало}, например заполненность диска → его температура
     metric_swaps: dict[str, str] = field(default_factory=lambda: {"disk.load": "disk.temp"})

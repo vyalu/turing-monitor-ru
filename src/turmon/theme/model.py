@@ -82,6 +82,22 @@ WIDGETS: dict[str, dict[str, Any]] = {
             Field("round", "Скруглённые концы", "bool", True),
         ) + _ALERT,
     },
+    "needle": {
+        "label": "Стрелка прибора",
+        "fields": _POS + (
+            Field("size", "Диаметр шкалы", "int", 160, lo=8, hi=2000),
+            Field("start", "Угол на минимуме (0 = вверх)", "float", -120.0, lo=-360, hi=360),
+            Field("sweep", "Размах, градусов", "float", 240.0, lo=-360, hi=360),
+        ) + _VAL + (
+            Field("length", "Длина, % радиуса", "int", 88, lo=5, hi=120),
+            Field("tail", "Хвостик, % радиуса", "int", 14, lo=0, hi=100),
+            Field("width", "Толщина у основания", "float", 4.0, lo=0.5, hi=60),
+            Field("color", "Цвет", "color", "#FF4D2D"),
+            Field("hub", "Втулка: диаметр", "int", 12, lo=0, hi=500),
+            Field("hub_color", "Втулка: цвет", "color", "#1A1A1A"),
+            Field("shadow", "Тень", "bool", True),
+        ) + _ALERT,
+    },
     "graph": {
         "label": "График",
         "fields": _POS + (
