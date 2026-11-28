@@ -45,7 +45,8 @@ async function post(body) {
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "media" || !sender.tab) return;
-  const tab = sender.tab.id;
+  // у каждого фрейма вкладки свой ключ: плеер может жить во встроенном фрейме
+  const tab = sender.tab.id * 1000 + ((sender.frameId || 0) % 1000);
   const d = msg.data;
   (async () => {
     const body = { token: TURMON.token, tab, data: d, incognito: !!sender.tab.incognito };
@@ -62,6 +63,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 });
 
 chrome.tabs && chrome.tabs.onRemoved && chrome.tabs.onRemoved.addListener((tab) => {
-  sentCover.delete(tab);
-  post({ token: TURMON.token, tab, data: null });
+  sentCover.delete(tab * 1000);
+  post({ token: TURMON.token, tab: tab * 1000, data: null });
 });

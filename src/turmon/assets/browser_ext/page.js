@@ -33,15 +33,40 @@
     return list[0].src || "";
   }
 
+  // Сайт не сообщил трек через mediaSession (так бывает у VK) — берём из плеера на странице.
+  const text = (sel) => {
+    for (const q of sel) {
+      const n = document.querySelector(q);
+      const t = n && (n.textContent || "").trim();
+      if (t) return t;
+    }
+    return "";
+  };
+  function fallback(el) {
+    if (!el || el.paused || el.ended) return null;
+    let title = text([".top_audio_player_title", "[data-testid='audio-player-title']",
+      "[class*='AudioPlayer'] [class*='title' i]", "[class*='audio_page_player_title_song']"]);
+    let artist = text(["[data-testid='audio-player-artist']", "[class*='audio_page_player_title_performer']",
+      "[class*='AudioPlayer'] [class*='artist' i]"]);
+    if (title && !artist) {
+      const m = title.split(/\s+[–—-]\s+/);
+      if (m.length >= 2) { artist = m.shift(); title = m.join(" – "); }
+    }
+    if (!title) title = (document.title || "").replace(/\s*[|—-]\s*(VK|ВКонтакте|YouTube)\s*$/i, "").trim();
+    if (!title) return null;
+    return { title, artist, album: "", artwork: [] };
+  }
+
   function collect() {
     const ms = navigator.mediaSession;
-    const md = ms && ms.metadata;
-    if (!md || !md.title) return null;
+    let md = ms && ms.metadata;
     const el = pickElement();
+    if (!md || !md.title) md = fallback(el);
+    if (!md || !md.title) return null;
     let playing = false;
     if (el) playing = !el.paused && !el.ended;
-    if (ms.playbackState === "playing") playing = true;
-    else if (ms.playbackState === "paused" && !(el && !el.paused)) playing = false;
+    if (ms && ms.playbackState === "playing") playing = true;
+    else if (ms && ms.playbackState === "paused" && !(el && !el.paused)) playing = false;
     const d = el && isFinite(el.duration) ? el.duration : 0;
     return {
       title: md.title || "",
