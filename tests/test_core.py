@@ -559,3 +559,32 @@ def test_block_scale_only_that_block():
     w = lambda b: b[2] - b[0]  # noqa: E731
     assert w(r.bboxes["clock"]) < w(base["clock"]) * 0.7
     assert w(r.bboxes["cpu"]) == w(base["cpu"])
+
+
+def test_engine_loop_renders_frames(tmp_path, monkeypatch):
+    """Рабочий цикл движка рисует кадры (ловит ошибки вроде переменной до присваивания)."""
+    import threading
+
+    from turmon.config import Settings
+    from turmon.engine import Engine
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    e = Engine(Settings())
+    frames = []
+    got = threading.Event()
+    e.on_frame = lambda im: (frames.append(im), got.set())
+    e.settings.block_scales = {e.settings.theme: {"clock": 0.6}}
+    errors = []
+    import logging
+
+    class H(logging.Handler):
+        def emit(self, rec):
+            if rec.levelno >= logging.ERROR:
+                errors.append(rec.getMessage())
+    logging.getLogger("turmon").addHandler(H())
+    e.start()
+    try:
+        assert got.wait(15), errors
+    finally:
+        e.stop()
+    assert frames and not errors
