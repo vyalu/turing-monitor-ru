@@ -44,9 +44,11 @@ fn main() {
         let parent = args.iter().position(|a| a == "--parent").and_then(|j| args.get(j + 1)).and_then(|p| p.parse().ok())
             .unwrap_or(0);
         let _ = i;
+        let respawn = args.iter().position(|a| a == "--respawn").and_then(|j| args.get(j + 1)).and_then(|p| p.parse().ok())
+            .unwrap_or(0);
         let spec = flexi_logger::FileSpec::default().directory(config::data_dir()).basename("media_helper_core").suppress_timestamp();
         let _ = flexi_logger::Logger::try_with_str("info, tiny_skia=error").map(|l| l.log_to_file(spec).start().map(std::mem::forget));
-        turmon_core::sensors::media::run_helper(parent);
+        turmon_core::sensors::media::run_helper(parent, respawn);
         return;
     }
     setup_logging();

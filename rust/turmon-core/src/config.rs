@@ -125,6 +125,8 @@ pub struct Settings {
     pub disk_index: i64,
     pub sensor_overrides: HashMap<String, String>,
     pub hidden_blocks: HashMap<String, Vec<String>>,
+    /// размер отдельных блоков: тема -> {блок: множитель}
+    pub block_scales: HashMap<String, HashMap<String, f64>>,
     /// замена показателей во всех темах: {было: стало}
     #[serde(default = "d_swaps")]
     pub metric_swaps: HashMap<String, String>,
@@ -152,7 +154,7 @@ impl Default for Settings {
             alert_cpu: 90.0, alert_gpu: 85.0, alert_seconds: 10.0, alert_blink: true, alert_notify: true,
             city: String::new(), lat: None, lon: None, weather_auto: true, net_iface: String::new(),
             disk: String::new(), disk_index: 0, sensor_overrides: HashMap::new(), hidden_blocks: HashMap::new(),
-            metric_swaps: d_swaps(), text_scales: HashMap::new(), value_scales: HashMap::new(), user_text1: String::new(),
+            block_scales: HashMap::new(), metric_swaps: d_swaps(), text_scales: HashMap::new(), value_scales: HashMap::new(), user_text1: String::new(),
             user_text2: String::new(), user_text3: String::new(), screen_off_on_exit: true,
             other: serde_json::Map::new(),
         }

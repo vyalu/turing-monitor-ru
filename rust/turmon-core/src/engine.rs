@@ -1,6 +1,6 @@
 //! Главный цикл: датчики → отрисовка темы → экран.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -56,6 +56,8 @@ struct Inner {
     blocks: Option<(String, Vec<Block>)>,
     hidden: HashSet<String>,
     hide_fps: bool,
+    /// элемент -> размер его блока («Блоки и размеры…»)
+    id_scales: HashMap<String, f32>,
     fail_logged: f64,
 }
 
@@ -108,7 +110,7 @@ impl Engine {
                 settings, settings_mtime: mtime, theme, renderer, active_id, previewing: false, manual_until: 0.0,
                 display, sender: FrameSender::default(), need_setup: true, next_connect: 0.0, settled: false,
                 reinit_at: 0.0, applied_brightness: None, paused: false, monitor_off: false, sleeping: false,
-                blocks: None, hidden: HashSet::new(), hide_fps: false, fail_logged: 0.0,
+                blocks: None, hidden: HashSet::new(), hide_fps: false, id_scales: HashMap::new(), fail_logged: 0.0,
             }),
             hub: Hub::new(),
             weather_source: Mutex::new(Arc::new(Mutex::new(String::new()))),
@@ -279,7 +281,9 @@ impl Engine {
     fn update_hidden(i: &mut Inner, apply: bool) {
         let key = Self::scale_key(i);
         let keys: Vec<String> = if apply { i.settings.hidden_blocks.get(&key).cloned().unwrap_or_default() } else { vec![] };
-        if keys.is_empty() {
+        let sizes: HashMap<String, f64> = if apply { i.settings.block_scales.get(&key).cloned().unwrap_or_default() } else { HashMap::new() };
+        i.id_scales.clear();
+        if keys.is_empty() && sizes.is_empty() {
             i.hidden.clear();
             i.hide_fps = false;
             return;
@@ -287,7 +291,17 @@ impl Engine {
         if i.blocks.as_ref().map(|b| &b.0) != Some(&key) {
             i.blocks = Some((key.clone(), blocks::blocks_for(&i.theme)));
         }
-        i.hidden = blocks::hidden_ids(&i.blocks.as_ref().unwrap().1, &keys);
+        let bl = &i.blocks.as_ref().unwrap().1;
+        let mut ids = HashMap::new();
+        for b in bl {
+            if let Some(f) = sizes.get(&b.key).filter(|f| (**f - 1.0).abs() > 0.001) {
+                for id in &b.ids {
+                    ids.insert(id.clone(), *f as f32);
+                }
+            }
+        }
+        i.hidden = blocks::hidden_ids(bl, &keys);
+        i.id_scales = ids;
         i.hide_fps = keys.iter().any(|k| k == "fps");
     }
 
@@ -686,6 +700,10 @@ impl Engine {
             let skip = if page == "main" && !i.hidden.is_empty() { Some(i.hidden.clone()) } else { None };
             if i.renderer.swaps != s.metric_swaps {
                 i.renderer.swaps = s.metric_swaps.clone();
+            }
+            let want = if page == "main" { i.id_scales.clone() } else { HashMap::new() };
+            if i.renderer.id_scales != want {
+                i.renderer.id_scales = want;
             }
             let mut frame = i.renderer.render(&values, &history, skip.as_ref());
             let marquee = i.renderer.animating;

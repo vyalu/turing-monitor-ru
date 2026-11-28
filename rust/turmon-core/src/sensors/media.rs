@@ -150,6 +150,11 @@ pub mod gsmtc {
             Reader { mgr: None, empty_since: Instant::now(), pos_base: None, track: String::new(), last_apps: String::new() }
         }
 
+        /// Видел ли Windows-менеджер хоть один плеер при последнем чтении.
+        pub fn seen_players(&self) -> bool {
+            !self.last_apps.is_empty()
+        }
+
         fn manager(&mut self) -> anyhow::Result<&Manager> {
             if self.mgr.is_none() {
                 self.mgr = Some(Manager::RequestAsync()?.join()?);
@@ -268,14 +273,24 @@ fn state_file() -> PathBuf {
 /// Работает, пока отвечает ядро (127.0.0.1:47870). Открыть процесс ядра (с правами администратора)
 /// помощник без прав не может, поэтому проверяем по связи, а не по процессу.
 #[cfg(windows)]
-pub fn run_helper(parent: u32) {
+pub fn run_helper(parent: u32, respawn: u32) {
     // одна копия помощника
     unsafe {
         use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
         let name: Vec<u16> = "Local\\TuringMonitorRU-media-core".encode_utf16().chain(Some(0)).collect();
         let h = windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 1, name.as_ptr());
-        if h.is_null() || GetLastError() == ERROR_ALREADY_EXISTS {
+        if h.is_null() {
             return;
+        }
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            // нас запустил прежний помощник — ждём, пока он завершится и отпустит мьютекс
+            if respawn == 0 {
+                return;
+            }
+            let r = windows_sys::Win32::System::Threading::WaitForSingleObject(h, 8000);
+            if r != 0 && r != 0x80 {
+                return;
+            }
         }
     }
     let out = state_file();
@@ -284,8 +299,30 @@ pub fn run_helper(parent: u32) {
     let mut next_diag = Instant::now();
     let mut next_check = Instant::now() + Duration::from_secs(10);
     let mut misses = 0;
-    info!("Медиа-помощник запущен (ядро {parent})");
+    let mut empty_since = Instant::now();
+    info!("Медиа-помощник запущен (ядро {parent}{})", if respawn > 0 { format!(", перезапуск {respawn}") } else { String::new() });
     loop {
+        // Сразу после включения ПК менеджер сеансов в процессе, запущенном слишком рано, так и остаётся
+        // пустым. Помогает только новый процесс — перезапускаемся, пока не увидим плеер (до 15 раз).
+        if r.seen_players() {
+            empty_since = Instant::now();
+        } else if empty_since.elapsed().as_secs() > 40 && respawn < 15 {
+            use std::os::windows::process::CommandExt;
+            info!("Медиа-помощник: Windows не отдаёт ни одного плеера — перезапускаюсь");
+            let ok = std::env::current_exe().and_then(|exe| {
+                std::process::Command::new(exe)
+                    .args(["--media-helper", "--parent", &parent.to_string(), "--respawn", &(respawn + 1).to_string()])
+                    .creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000)
+                    .spawn()
+            });
+            match ok {
+                Ok(_) => break,
+                Err(e) => {
+                    warn!("Медиа-помощник: перезапуск не удался: {e}");
+                    empty_since = Instant::now();
+                }
+            }
+        }
         if Instant::now() >= next_check {
             next_check = Instant::now() + Duration::from_secs(5);
             let alive = std::net::TcpStream::connect_timeout(&([127, 0, 0, 1], crate::ipc::PORT).into(),

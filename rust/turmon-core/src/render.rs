@@ -49,6 +49,8 @@ pub struct Renderer {
     clock: Instant,
     /// замена показателей из настроек
     pub swaps: HashMap<String, String>,
+    /// размер отдельных блоков: элемент -> множитель
+    pub id_scales: HashMap<String, f32>,
     /// в кадре бегущая строка — нужны частые кадры
     pub animating: bool,
     marquee: HashMap<String, (String, f64)>,
@@ -57,7 +59,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(theme: Theme, label_scale: f32, value_scale: f32, page: &str) -> Renderer {
         Renderer { theme, page: page.into(), label_scale, value_scale, bboxes: HashMap::new(), bg: None,
-                   auto_player: None, clock: Instant::now(), swaps: HashMap::new(), animating: false,
+                   auto_player: None, clock: Instant::now(), swaps: HashMap::new(), id_scales: HashMap::new(), animating: false,
                    marquee: HashMap::new() }
     }
 
@@ -151,7 +153,8 @@ impl Renderer {
             return None;
         }
         let base_size = w.num("size", 20.0).round().max(4.0) as f32;
-        let k = if src.contains('{') { self.value_scale } else { self.label_scale };
+        let k = if src.contains('{') { self.value_scale } else { self.label_scale }
+            * self.id_scales.get(w.id()).copied().unwrap_or(1.0);
         let size = (base_size * k).round().max(4.0);
         let fname = { let f = w.str("font"); if f.is_empty() { fonts::DEFAULT.to_string() } else { f } };
         let font = fonts::get(&fname);
@@ -553,7 +556,7 @@ impl Renderer {
     fn w_weather(&self, c: &mut Canvas, w: &Widget, values: &Values) -> Option<(f32, f32, f32, f32)> {
         let (x, y) = (w.num("x", 0.0) as f32 * SS, w.num("y", 0.0) as f32 * SS);
         let s0 = w.num("size", 64.0) as f32 * SS;
-        let s = s0 * self.value_scale;
+        let s = s0 * self.value_scale * self.id_scales.get(w.id()).copied().unwrap_or(1.0);
         let (x, y) = (x - (s - s0) / 2.0, y - (s - s0) / 2.0);
         let key = { let k = w.str("source"); if k.is_empty() { "weather.icon".to_string() } else { k } };
         let kind = values.get(&key).map(|v| v.as_str()).unwrap_or_default();
