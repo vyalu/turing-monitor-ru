@@ -88,17 +88,25 @@ def load_image(path: Path, w: int = 0, h: int = 0, mode: str = "stretch") -> Ima
 
 
 SPIN_SPEED = 24.0   # градусов в секунду: медленно, чтобы шаг между кадрами был маленьким
-MARQUEE_SPEED = 30.0  # бегущая строка: точек экрана в секунду
+MARQUEE_FPS = 25      # бегущая строка: кадров в секунду, пока она бежит
 MARQUEE_HOLD = 2.0    # секунд стоим в начале, чтобы успеть прочитать
 MARQUEE_GAP = 40      # промежуток между концом названия и его повтором, точек экрана
-MARQUEE_FPS = 20      # кадров в секунду, пока строка бежит
 
 
-def marquee_offset(elapsed: float, length: float) -> float:
-    """Сдвиг бегущей строки (в точках экрана): пауза в начале, потом плавно влево по кругу."""
-    run = (length + MARQUEE_GAP) / MARQUEE_SPEED
-    phase = elapsed % (MARQUEE_HOLD + run)
-    return max(0.0, phase - MARQUEE_HOLD) * MARQUEE_SPEED
+def marquee_step(state: list | None, line: str, length: float, now: float) -> tuple[list, int, bool]:
+    """Шаг бегущей строки: ровно 1 точка экрана за кадр, без дробных сдвигов — так текст не дрожит,
+    даже если кадры уходят на экран неровно. state = [строка, стоим до, сдвиг, время шага].
+    Возвращает (state, сдвиг в точках, нужны ли частые кадры)."""
+    if state is None or state[0] != line:  # новый трек — снова с начала, с паузой
+        state = [line, now + MARQUEE_HOLD, 0, now]
+    if now < state[1]:
+        return state, 0, state[1] - now < 0.5  # скоро поедет — заранее переходим на частые кадры
+    if now - state[3] >= 0.75 / MARQUEE_FPS:
+        state[2] += 1
+        state[3] = now
+        if state[2] >= int(round(length)) + MARQUEE_GAP:  # круг пройден — снова пауза в начале
+            state[1], state[2] = now + MARQUEE_HOLD, 0
+    return state, state[2], True
 
 
 class Renderer:
@@ -118,7 +126,7 @@ class Renderer:
         self.swaps: dict[str, str] = {}  # замена показателей из настроек («вместо X показывать Y»)
         self.id_scales: dict[str, float] = {}  # размер отдельных блоков: элемент -> множитель
         self.animating = False  # в кадре есть бегущая строка — движку нужны частые кадры
-        self._marquee: dict[str, tuple[str, float]] = {}  # элемент → (текст, когда начали показывать)
+        self._marquee: dict[str, list] = {}  # элемент → состояние бегущей строки (marquee_step)
 
     # ---- фон ----
     def page_data(self) -> dict[str, Any]:
@@ -265,16 +273,10 @@ class Renderer:
 
     def _draw_marquee(self, img: Image.Image, key: str, line: str, parts, lw: float, x: float, ly: float,
                       width: float, asc: int, desc: int, color, shadow) -> None:
-        now = _time.monotonic()
-        prev = self._marquee.get(key)
-        if prev is None or prev[0] != line:  # новый трек — снова с начала, с паузой
-            prev = (line, now)
-            self._marquee[key] = prev
-        off = marquee_offset(now - prev[1], lw / SS) * SS
-        if off > 0:
-            self.animating = True
-        elif now - prev[1] < MARQUEE_HOLD + 0.5:
-            self.animating = True  # скоро поедет — заранее переходим на частые кадры
+        st, off_px, anim = marquee_step(self._marquee.get(key), line, lw / SS, _time.monotonic())
+        self._marquee[key] = st
+        self.animating |= anim
+        off = off_px * SS
         pad = 3 * SS
         lay_w, lay_h = int(math.ceil(width)), int(asc + desc + pad * 2)
         lay = Image.new("RGBA", (lay_w, lay_h), (0, 0, 0, 0))
