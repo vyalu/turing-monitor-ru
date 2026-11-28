@@ -15,16 +15,38 @@ use crate::values::{self, History, Val, Values};
 pub const SS: f32 = 2.0;
 pub const SPIN_SPEED: f64 = 24.0;
 /// Бегущая строка с названием трека (как в render.py): скорость, пауза в начале, промежуток, кадры/с.
-pub const MARQUEE_SPEED: f64 = 30.0;
+pub const MARQUEE_FPS: f64 = 25.0;
 pub const MARQUEE_HOLD: f64 = 2.0;
 pub const MARQUEE_GAP: f64 = 40.0;
-pub const MARQUEE_FPS: f64 = 20.0;
 
-/// Сдвиг бегущей строки в точках экрана: пауза в начале, потом плавно влево по кругу.
-pub fn marquee_offset(elapsed: f64, length: f64) -> f64 {
-    let run = (length + MARQUEE_GAP) / MARQUEE_SPEED;
-    let phase = elapsed % (MARQUEE_HOLD + run);
-    (phase - MARQUEE_HOLD).max(0.0) * MARQUEE_SPEED
+/// Состояние бегущей строки: строка, стоим до, сдвиг в точках, время последнего шага.
+#[derive(Clone, Debug)]
+pub struct Marquee {
+    pub line: String,
+    pub hold_until: f64,
+    pub off: u32,
+    pub last: f64,
+}
+
+/// Шаг бегущей строки (как marquee_step в render.py): ровно 1 точка экрана за кадр — без дрожания.
+/// Возвращает (сдвиг в точках, нужны ли частые кадры).
+pub fn marquee_step(st: &mut Option<Marquee>, line: &str, length: f64, now: f64) -> (u32, bool) {
+    if st.as_ref().is_none_or(|m| m.line != line) {
+        *st = Some(Marquee { line: line.to_string(), hold_until: now + MARQUEE_HOLD, off: 0, last: now });
+    }
+    let m = st.as_mut().unwrap();
+    if now < m.hold_until {
+        return (0, m.hold_until - now < 0.5);
+    }
+    if now - m.last >= 0.75 / MARQUEE_FPS {
+        m.off += 1;
+        m.last = now;
+        if m.off as f64 >= length.round() + MARQUEE_GAP {
+            m.hold_until = now + MARQUEE_HOLD;
+            m.off = 0;
+        }
+    }
+    (m.off, true)
 }
 
 pub type BBox = (i32, i32, i32, i32);
@@ -53,7 +75,7 @@ pub struct Renderer {
     pub id_scales: HashMap<String, f32>,
     /// в кадре бегущая строка — нужны частые кадры
     pub animating: bool,
-    marquee: HashMap<String, (String, f64)>,
+    marquee: HashMap<String, Marquee>,
 }
 
 impl Renderer {
@@ -237,17 +259,13 @@ impl Renderer {
     fn draw_marquee(&mut self, c: &mut Canvas, key: &str, line: &str, parts: &[(String, ab_glyph::FontArc)], lw: f32,
                     x: f32, ly: f32, width: f32, asc: f32, desc: f32, px: f32, col: Rgba, shadow: Option<Rgba>) {
         let now = self.clock.elapsed().as_secs_f64();
-        let start = match self.marquee.get(key) {
-            Some((t, s)) if t == line => *s,
-            _ => {
-                self.marquee.insert(key.to_string(), (line.to_string(), now));
-                now
-            }
-        };
-        let off = (marquee_offset(now - start, (lw / SS) as f64) * SS as f64) as f32;
-        if off > 0.0 || now - start < MARQUEE_HOLD + 0.5 {
-            self.animating = true;
+        let mut st = self.marquee.remove(key);
+        let (off_px, anim) = marquee_step(&mut st, line, (lw / SS) as f64, now);
+        if let Some(m) = st {
+            self.marquee.insert(key.to_string(), m);
         }
+        self.animating |= anim;
+        let off = off_px as f32 * SS;
         let pad = 3.0 * SS;
         let (lay_w, lay_h) = (width.ceil().max(1.0) as u32, (asc + desc + pad * 2.0).ceil().max(1.0) as u32);
         let mut lay = Canvas::new(lay_w, lay_h, Rgba(0, 0, 0, 0));
@@ -612,17 +630,22 @@ mod marquee_tests {
         v.insert("media.playing".into(), Val::Int(1));
         let mut r = Renderer::new(t.clone(), 1.0, 1.0, "main");
         let a = r.render(&v, &History::new(), None);
-        assert!(r.animating);
-        let (line, start) = r.marquee["t:0"].clone();
-        r.marquee.insert("t:0".into(), (line, start - MARQUEE_HOLD - 1.0));
+        if let Some(m) = r.marquee.get_mut("t:0") {
+            m.hold_until -= MARQUEE_HOLD + 1.0;
+            m.last -= 1.0;
+        }
         let b = r.render(&v, &History::new(), None);
+        assert!(r.animating);
         assert_ne!(a.as_raw(), b.as_raw());
         v.insert("media.playing".into(), Val::Int(0));
         let mut r2 = Renderer::new(t, 1.0, 1.0, "main");
         r2.render(&v, &History::new(), None);
         assert!(!r2.animating);
-        assert_eq!(marquee_offset(0.5, 300.0), 0.0);
-        assert_eq!(marquee_offset(MARQUEE_HOLD + 1.0, 300.0), MARQUEE_SPEED);
+        let mut st = None;
+        assert_eq!(marquee_step(&mut st, "x", 10.0, 100.0).0, 0);
+        let offs: Vec<u32> = (0..60).map(|k| marquee_step(&mut st, "x", 10.0, 100.0 + MARQUEE_HOLD + k as f64 * 0.04).0).collect();
+        assert_eq!(&offs[..5], &[1, 2, 3, 4, 5]);
+        assert!(offs.contains(&0) && *offs.iter().max().unwrap() == 10 + MARQUEE_GAP as u32 - 1);
     }
 
     #[test]
