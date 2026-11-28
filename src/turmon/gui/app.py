@@ -116,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("file", nargs="?", help="файл темы .tmtheme для открытия")
     ap.add_argument("--media-helper", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--parent", type=int, default=0, help=argparse.SUPPRESS)
+    ap.add_argument("--respawn", type=int, default=0, help=argparse.SUPPRESS)
     args, qt_args = ap.parse_known_args(argv if argv is not None else sys.argv[1:])
 
     if args.media_helper:  # процесс-помощник без прав администратора: только читает музыку
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         from ..paths import data_dir
         from ..sensors.media_helper import run_helper
 
-        return run_helper(args.parent, data_dir())
+        return run_helper(args.parent, data_dir(), args.respawn)
 
     setup_logging(args.debug)
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)

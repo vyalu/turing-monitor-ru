@@ -142,9 +142,9 @@ class HomePage(QWidget):
         self.flip.toggled.connect(self._flip)
         ll.addWidget(self.flip)
         row2 = QHBoxLayout()
-        self.b_blocks = QPushButton("Что показывать…")
-        self.b_blocks.setToolTip("Скрыть ненужные блоки текущей темы (например, «Время работы»), "
-                                 "не создавая новую тему")
+        self.b_blocks = QPushButton("Блоки и размеры…")
+        self.b_blocks.setToolTip("Скрыть ненужные блоки текущей темы или поменять размер отдельного блока "
+                                 "(например, часы поменьше), не создавая новую тему")
         self.b_blocks.clicked.connect(self._show_blocks)
         row2.addWidget(self.b_blocks)
         b_rc = QPushButton("Переподключить")
@@ -654,31 +654,47 @@ class BlocksPopup(QFrame):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 14)
         lay.setSpacing(6)
-        lay.addWidget(label("Показывать на мини-экране", "h2"))
-        h = hint("Снимите галочку — блок пропадёт с экрана вместе с подписью. Тема не меняется, "
-                 "вернуть можно в любой момент. Запоминается для каждой темы.")
-        h.setMaximumWidth(340)
+        lay.addWidget(label("Блоки на мини-экране", "h2"))
+        h = hint("Галочка — показывать блок или нет. Размер — только для этого блока, поверх общих ползунков: "
+                 "например, часы поменьше, а температуры крупнее. Тема не меняется, запоминается для каждой темы.")
+        h.setMaximumWidth(420)
         lay.addWidget(h)
         blocks = engine.theme_blocks()
         hidden = engine.hidden_blocks()
+        sizes = engine.block_scales()
         self.boxes: list[QCheckBox] = []
+        self.spins: list[QSpinBox] = []
         if not blocks:
             e = hint("В этой теме нет отдельных блоков: например, тема из TURZX, где всё нарисовано "
                      "одной картинкой. Скрыть элементы можно в редакторе.")
-            e.setMaximumWidth(340)
+            e.setMaximumWidth(420)
             lay.addWidget(e)
         grid = QGridLayout()
-        grid.setHorizontalSpacing(18)
+        grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(4)
-        for i, b in enumerate(blocks):
+        if blocks:
+            grid.addWidget(label("Блок", "muted"), 0, 0)
+            grid.addWidget(label("Размер", "muted"), 0, 1)
+        for i, b in enumerate(blocks, start=1):
             cb = QCheckBox(b.title)
             cb.setChecked(b.key not in hidden)
             if b.key == "fps":
                 cb.setToolTip("Показывается только во время игры вместо одного из блоков")
             cb.toggled.connect(lambda on, k=b.key: self.engine.set_block_hidden(k, not on) or
                                self.engine.settings.save())
-            grid.addWidget(cb, i // 2, i % 2)
+            sp = QSpinBox()
+            sp.setRange(40, 250)
+            sp.setSingleStep(10)
+            sp.setSuffix(" %")
+            sp.setValue(int(round(sizes.get(b.key, 1.0) * 100)))
+            sp.setToolTip("Размер текста этого блока (100 % — как в теме)")
+            sp.setKeyboardTracking(False)
+            sp.valueChanged.connect(lambda v, k=b.key: self.engine.set_block_scale(k, v / 100) or
+                                    self.engine.settings.save())
+            grid.addWidget(cb, i, 0)
+            grid.addWidget(sp, i, 1)
             self.boxes.append(cb)
+            self.spins.append(sp)
         lay.addLayout(grid)
         if blocks:
             br = QHBoxLayout()
@@ -686,6 +702,10 @@ class BlocksPopup(QFrame):
             b_all.setObjectName("ghost")
             b_all.clicked.connect(lambda: [c.setChecked(True) for c in self.boxes])
             br.addWidget(b_all)
+            b_size = QPushButton("Сбросить размеры")
+            b_size.setObjectName("ghost")
+            b_size.clicked.connect(lambda: [x.setValue(100) for x in self.spins])
+            br.addWidget(b_size)
             br.addStretch(1)
             lay.addLayout(br)
 

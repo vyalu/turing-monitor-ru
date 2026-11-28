@@ -30,7 +30,29 @@ def state_file(data_dir: Path) -> Path:
 
 
 # ---------------------------------------------------------------- сторона помощника
-def run_helper(parent_pid: int, data_dir: Path) -> int:
+# Сразу после включения ПК помощник иногда стартует раньше, чем Windows готова отдавать плееры:
+# менеджер сеансов в таком процессе так и остаётся пустым, даже когда музыка уже играет.
+# Помогает только новый процесс — помощник перезапускает сам себя, пока не увидит плеер.
+EMPTY_RESPAWN = 40.0   # секунд без единого плеера — перезапуск
+MAX_RESPAWNS = 15      # не больше ~10 минут попыток, дальше просто ждём
+
+
+def _respawn(n: int) -> bool:
+    args = list(sys.argv[1:])
+    if "--respawn" in args:
+        i = args.index("--respawn")
+        del args[i:i + 2]
+    cmd = [sys.executable, *(args if getattr(sys, "frozen", False) else [sys.argv[0], *args]), "--respawn", str(n)]
+    flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED, NEW_PROCESS_GROUP, NO_WINDOW
+    try:
+        subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+        return True
+    except OSError as e:
+        log.warning("Медиа-помощник: перезапуск не удался: %s", e)
+        return False
+
+
+def run_helper(parent_pid: int, data_dir: Path, respawn: int = 0) -> int:
     """Точка входа процесса-помощника (TuringMonitorRU.exe --media-helper)."""
     import ctypes
 
@@ -40,14 +62,23 @@ def run_helper(parent_pid: int, data_dir: Path) -> int:
     k32.CreateMutexW.restype = ctypes.c_void_p
     h = k32.CreateMutexW(None, True, "Local\\TuringMonitorRU-media")
     if h and ctypes.get_last_error() == 183:  # уже работает другой помощник
-        return 0
+        if not respawn:
+            return 0
+        # нас запустил прежний помощник — ждём, пока он завершится и отпустит мьютекс
+        k32.WaitForSingleObject.restype = ctypes.c_uint32
+        if k32.WaitForSingleObject(ctypes.c_void_p(h), 8000) not in (0, 0x80):
+            return 0
 
     # Windows отдаёт медиа-сеансы процессу, у которого было окно: создаём его на миг
     try:
+        from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication, QWidget
 
         app = QApplication.instance() or QApplication([sys.argv[0]])
         w = QWidget()
+        # окно не должно забирать фокус: иначе игра в полноэкранном режиме свернётся
+        w.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus)
+        w.setAttribute(Qt.WA_ShowWithoutActivating)
         w.setWindowOpacity(0.0)
         w.resize(1, 1)
         w.show()
@@ -62,14 +93,23 @@ def run_helper(parent_pid: int, data_dir: Path) -> int:
     mp = MediaProvider(Path(data_dir) / "covers")
     mp.ready.set()
     mp.start()
-    log.info("Медиа-помощник запущен (pid %s, родитель %s)", os.getpid(), parent_pid)
+    log.info("Медиа-помощник запущен (pid %s, родитель %s%s)", os.getpid(), parent_pid,
+             f", перезапуск {respawn}" if respawn else "")
     diag: list[str] = []
     next_diag = 0.0
+    empty_since = time.monotonic()
     import psutil
 
     while True:
         if parent_pid and not psutil.pid_exists(parent_pid):
             break
+        if mp._last_apps:
+            empty_since = time.monotonic()
+        elif time.monotonic() - empty_since > EMPTY_RESPAWN and respawn < MAX_RESPAWNS:
+            log.info("Медиа-помощник: Windows не отдаёт ни одного плеера — перезапускаюсь")
+            if _respawn(respawn + 1):
+                break
+            empty_since = time.monotonic()
         now = time.time()
         if now >= next_diag:
             try:
