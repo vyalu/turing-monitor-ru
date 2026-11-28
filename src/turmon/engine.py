@@ -748,7 +748,6 @@ class Engine:
                 alert_busy = self._watch_alerts(raw)
                 self.smoother.set_target(raw, t0)
             renderer.swaps = self.settings.metric_swaps or {}
-            renderer.id_scales = self.id_scales if page == "main" else {}
             smooth = self.settings.smooth
             values = self.smoother.values(t0) if smooth else raw
             busy = alert_busy
@@ -764,6 +763,7 @@ class Engine:
                     if anim_every:
                         values = dict(values)
                         values["media.anim"] = self.settings.vinyl_anim
+                renderer.id_scales = self.id_scales if page == "main" else {}
                 skip = None
                 if page == "main" and self.hidden_skip:
                     skip = self.hidden_skip
