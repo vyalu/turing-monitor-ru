@@ -26,7 +26,7 @@ from ..sensors.weather import search_city
 from ..theme.render import Renderer
 from ..theme.sources import sample_values
 from .. import winsys
-from .common import Bridge, app_icon, pil_to_pixmap
+from .common import Bridge, RingTile, app_icon, nav_icon, pil_to_pixmap
 from .editor import EditorPage
 
 
@@ -66,9 +66,29 @@ class HomePage(QWidget):
         self.win = win
         self.engine: Engine = win.engine
         s = self.engine.settings
-        root = QHBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(14)
+        # сверху — живые плитки, как в игровых программах: температуры и загрузка
+        tiles = QHBoxLayout()
+        tiles.setSpacing(12)
+        self.tiles = {
+            "cpu": RingTile("Процессор"),
+            "gpu": RingTile("Видеокарта"),
+            "ram": RingTile("Память"),
+            "vram": RingTile("Видеопамять"),
+            "extra": RingTile("Диск"),
+        }
+        for t in self.tiles.values():
+            tiles.addWidget(t, 1)
+        outer.addLayout(tiles)
+        self._tiles_timer = QTimer(self)
+        self._tiles_timer.timeout.connect(self._update_tiles)
+        self._tiles_timer.start(1000)
+        QTimer.singleShot(300, self._update_tiles)
+        root = QHBoxLayout()
         root.setSpacing(16)
+        outer.addLayout(root, 1)
 
         # слева — живой экран
         left, ll = card()
@@ -101,7 +121,7 @@ class HomePage(QWidget):
         self.preview = QLabel()
         self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignCenter)
-        self.preview.setMinimumHeight(420)
+        self.preview.setMinimumHeight(330)
         ll.addWidget(self.preview, 1)
 
         row = QHBoxLayout()
@@ -447,6 +467,49 @@ class HomePage(QWidget):
         self.sync_scale()
         self.win.tray_update()
 
+    def _update_tiles(self) -> None:
+        try:
+            v, _h = self.engine.hub.snapshot()
+        except Exception:  # noqa: BLE001
+            return
+
+        def f(key: str, fmt: str) -> str:
+            x = v.get(key)
+            try:
+                return fmt.format(float(x)) if x not in (None, "") else ""
+            except (TypeError, ValueError):
+                return ""
+
+        def join(*parts: str) -> str:
+            return " · ".join(p for p in parts if p)
+
+        def num(key: str):
+            try:
+                return float(v[key]) if v.get(key) not in (None, "") else None
+            except (TypeError, ValueError):
+                return None
+
+        def temp(key: str, warn: float) -> tuple[str, bool]:
+            x = num(key)
+            return ("—" if x is None else f"{x:.0f}°"), (x is not None and x >= warn)
+
+        t = self.tiles
+        big, hot = temp("cpu.temp", 85)
+        t["cpu"].set(num("cpu.load"), big, f("cpu.freq", "{:.1f} ГГц"), hot)
+        big, hot = temp("gpu.temp", 85)
+        t["gpu"].set(num("gpu.load"), big, f("gpu.power", "{:.0f} Вт"), hot)
+        t["ram"].set(num("ram.load"), f("ram.used", "{:.1f} ГБ") or "—", f("ram.total", "из {:.0f} ГБ"))
+        t["vram"].set(num("gpu.mem_load"), f("gpu.mem_used", "{:.1f} ГБ") or "—", f("gpu.mem_total", "из {:.0f} ГБ"))
+        ex = t["extra"]
+        if v.get("fps.value") not in (None, ""):
+            ex.title, ex.unit, ex.hi = "FPS в игре", "", 240
+            fps = num("fps.value")
+            ex.set(fps, f("fps.value", "{:.0f}"), join(f("fps.low1", "1% low {:.0f}"), str(v.get("fps.app") or "")))
+        else:
+            ex.title, ex.unit, ex.hi = "Диск", "%", 100
+            big, hot = temp("disk.temp", 68)
+            ex.set(num("disk.load"), big, "температура", hot)
+
     def _scale_row(self, parent_layout, title: str, tip: str, reset: bool = False) -> QSlider:
         row = QHBoxLayout()
         lbl = QLabel(title)
@@ -632,7 +695,9 @@ class HomePage(QWidget):
     def show_frame(self, img) -> None:
         if not self.isVisible():
             return
-        k = min(388 / img.width, 500 / img.height)
+        avail_w = max(200, self.preview.width() - 12)
+        avail_h = max(200, self.preview.height() - 12)
+        k = min(388 / img.width, avail_w / img.width, avail_h / img.height)
         k = 1.0 if k >= 1.0 else k
         self.preview.setPixmap(pil_to_pixmap(img, k if k != 1.0 else 1.0))
 
@@ -1760,18 +1825,23 @@ class MainWindow(QMainWindow):
         brand.setContentsMargins(8, 0, 8, 12)
         brand.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(app_icon().pixmap(28, 28))
+        logo.setPixmap(app_icon().pixmap(40, 40))
         brand.addWidget(logo)
         names = QVBoxLayout()
-        names.setSpacing(0)
-        names.addWidget(label("Turing Monitor", "brand"))
-        names.addWidget(label(f"RU · {__version__}", "muted"))
+        names.setSpacing(3)
+        names.addWidget(label("TURING MONITOR", "brand"))
+        ver = QHBoxLayout()
+        ver.setSpacing(0)
+        ver.addWidget(label(f"RU · {__version__}", "ver"))
+        ver.addStretch(1)
+        names.addLayout(ver)
         brand.addLayout(names, 1)
         sl.addLayout(brand)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        for t in ("Экран и темы", "Редактор тем", "Настройки"):
-            self.nav.addItem(t)
+        self.nav.setIconSize(QSize(22, 22))
+        for t, ic in (("Экран и темы", "screen"), ("Редактор тем", "edit"), ("Настройки", "settings")):
+            self.nav.addItem(QListWidgetItem(nav_icon(ic), "  " + t))
         sl.addWidget(self.nav, 1)
         lay.addWidget(side)
         self.stack = QStackedWidget()
