@@ -516,15 +516,22 @@ def test_marquee_scrolls_long_title():
                                   "text": "{media.title}", "clip": True}])
     v = {"media.title": "Очень длинное название трека, которое не влезает", "media.playing": 1}
     r = Renderer(t)
-    a = r.render(v)
-    assert r.animating
-    r._marquee["t:0"] = (r._marquee["t:0"][0], r._marquee["t:0"][1] - R.MARQUEE_HOLD - 1.0)
+    a = r.render(v)  # пауза в начале: стоим
+    r._marquee["t:0"][1] -= R.MARQUEE_HOLD + 1.0
+    r._marquee["t:0"][3] -= 1.0
     b = r.render(v)
+    assert r.animating
     assert a.tobytes() != b.tobytes()  # строка сдвинулась
     r2 = Renderer(t)
     r2.render({**v, "media.playing": 0})
     assert not r2.animating  # на паузе — обычное «…»
-    assert R.marquee_offset(0.5, 300) == 0 and R.marquee_offset(R.MARQUEE_HOLD + 1, 300) == R.MARQUEE_SPEED
+    st, off, _ = R.marquee_step(None, "x", 10, 100.0)
+    assert off == 0
+    offs = []
+    for k in range(60):  # после паузы — ровно по 1 точке за кадр, потом снова пауза
+        st, off, _ = R.marquee_step(st, "x", 10, 100.0 + R.MARQUEE_HOLD + k * 0.04)
+        offs.append(off)
+    assert offs[:5] == [1, 2, 3, 4, 5] and 0 in offs and max(offs) == 10 + R.MARQUEE_GAP - 1
 
 
 def test_needle_widget():
