@@ -48,6 +48,7 @@ class Engine:
         self._fps_seen_since = 0.0
         self._fps_last = 0.0
         self.hidden_skip: set[str] = set()
+        self.id_scales: dict[str, float] = {}  # элемент -> размер его блока («Блоки и размеры…»)
         self.hide_fps = False
         self._update_hidden(True)
         self._shut_down = False
@@ -239,7 +240,29 @@ class Engine:
 
         keys = self.hidden_blocks() if apply else set()
         self.hidden_skip = hidden_ids(self.theme_blocks(), keys) if keys else set()
+        sizes = self.block_scales() if apply else {}
+        self.id_scales = {i: f for b in self.theme_blocks() if (f := sizes.get(b.key, 1.0)) != 1.0 for i in b.ids}
         self.hide_fps = "fps" in keys  # FPS скрыт — в игре блок на его месте остаётся как обычно
+
+    def block_scales(self) -> dict[str, float]:
+        return dict(self.settings.block_scales.get(self._scale_key(self.theme), {}))
+
+    def set_block_scale(self, block: str, factor: float) -> None:
+        """Размер одного блока («Часы» меньше, «Процессор» крупнее) — поверх общих ползунков."""
+        with self._lock:
+            key = self._scale_key(self.theme)
+            cur = self.block_scales()
+            if abs(factor - 1.0) < 0.001:
+                cur.pop(block, None)
+            else:
+                cur[block] = round(factor, 2)
+            if cur:
+                self.settings.block_scales[key] = cur
+            else:
+                self.settings.block_scales.pop(key, None)
+            self._update_hidden(True)
+            self.sender.invalidate()
+        self._wake.set()
 
     def set_block_hidden(self, block: str, hidden: bool) -> None:
         with self._lock:
@@ -725,6 +748,7 @@ class Engine:
                 alert_busy = self._watch_alerts(raw)
                 self.smoother.set_target(raw, t0)
             renderer.swaps = self.settings.metric_swaps or {}
+            renderer.id_scales = self.id_scales if page == "main" else {}
             smooth = self.settings.smooth
             values = self.smoother.values(t0) if smooth else raw
             busy = alert_busy

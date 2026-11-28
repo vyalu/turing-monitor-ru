@@ -538,3 +538,17 @@ def test_needle_widget():
     red = lambda im, box: max(im.crop(box).getchannel("R").tobytes())  # noqa: E731
     assert red(lo, (10, 46, 30, 54)) > 200 and red(hi, (70, 46, 90, 54)) > 200
     assert red(lo, (70, 46, 90, 54)) < 60
+
+
+def test_block_scale_only_that_block():
+    t = Theme(name="b", widgets=[{"type": "text", "id": "clock", "x": 10, "y": 10, "size": 30, "text": "{time.hm}"},
+                                 {"type": "text", "id": "cpu", "x": 10, "y": 80, "size": 30, "text": "{cpu.temp:.0f}°"}])
+    v = {"time.hm": "21:47", "cpu.temp": 54}
+    r = Renderer(t)
+    r.render(v)
+    base = dict(r.bboxes)
+    r.id_scales = {"clock": 0.5}
+    r.render(v)
+    w = lambda b: b[2] - b[0]  # noqa: E731
+    assert w(r.bboxes["clock"]) < w(base["clock"]) * 0.7
+    assert w(r.bboxes["cpu"]) == w(base["cpu"])

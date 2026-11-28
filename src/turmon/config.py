@@ -69,6 +69,7 @@ class Settings:
     metric_swaps: dict[str, str] = field(default_factory=lambda: {"disk.load": "disk.temp"})
     text_scales: dict[str, float] = field(default_factory=dict)   # тема -> масштаб подписей
     value_scales: dict[str, float] = field(default_factory=dict)  # тема -> масштаб показателей
+    block_scales: dict[str, dict[str, float]] = field(default_factory=dict)  # тема -> {блок: размер}
 
     user_text1: str = ""
     user_text2: str = ""

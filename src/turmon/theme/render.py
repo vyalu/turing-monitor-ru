@@ -116,6 +116,7 @@ class Renderer:
         self._bg_key: tuple | None = None
         self._bg: Image.Image | None = None
         self.swaps: dict[str, str] = {}  # замена показателей из настроек («вместо X показывать Y»)
+        self.id_scales: dict[str, float] = {}  # размер отдельных блоков: элемент -> множитель
         self.animating = False  # в кадре есть бегущая строка — движку нужны частые кадры
         self._marquee: dict[str, tuple[str, float]] = {}  # элемент → (текст, когда начали показывать)
 
@@ -203,6 +204,7 @@ class Renderer:
         base_size = max(4, int(round(num(w.get("size"), 20))))
         # подписи («ОЗУ», «ПРОЦЕССОР») и показатели («54°», «37%») масштабируются отдельно
         k = self.value_scale if "{" in str(w.get("text", "")) else self.label_scale
+        k *= self.id_scales.get(w.get("id"), 1.0)
         size = max(4, int(round(base_size * k)))
         fname = str(w.get("font") or fonts.DEFAULT)
         font = fonts.get(fname, size * SS)
@@ -559,7 +561,7 @@ class Renderer:
     def _w_weather_icon(self, img: Image.Image, w: dict, values: dict, _h: dict) -> BBox:
         x, y = num(w.get("x")) * SS, num(w.get("y")) * SS
         s0 = num(w.get("size"), 64) * SS
-        s = s0 * self.value_scale
+        s = s0 * self.value_scale * self.id_scales.get(w.get("id"), 1.0)
         x, y = x - (s - s0) / 2, y - (s - s0) / 2  # от центра значка
         kind = str(values.get(w.get("source") or "weather.icon") or "")
         draw_weather_icon(img, (x, y, s), kind,
